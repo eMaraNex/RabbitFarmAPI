@@ -1,5 +1,8 @@
 import { pool } from '../config/database.js';
 import logger from '../middleware/logger.js';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const migrations = [
   {
@@ -141,7 +144,7 @@ const migrations = [
       CREATE TABLE IF NOT EXISTS hutch_rabbit_history (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         hutch_id VARCHAR(50) REFERENCES hutches(id) NOT NULL,
-        rabbit_id UUID REFERENCES rabbits(id) NOT NULL,
+        rabbit_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
         assigned_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
         removed_at TIMESTAMP WITH TIME ZONE,
@@ -176,8 +179,8 @@ const migrations = [
       CREATE TABLE IF NOT EXISTS breeding_records (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
-        doe_id UUID REFERENCES rabbits(id) ON DELETE CASCADE,
-        buck_id UUID REFERENCES rabbits(id) ON DELETE CASCADE,
+        doe_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        buck_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         mating_date DATE NOT NULL,
         expected_birth_date DATE,
         actual_birth_date DATE,
@@ -209,8 +212,8 @@ const migrations = [
       CREATE TABLE IF NOT EXISTS breeding_calendar (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
-        doe_id UUID REFERENCES rabbits(id) ON DELETE CASCADE,
-        buck_id UUID REFERENCES rabbits(id) ON DELETE CASCADE,
+        doe_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        buck_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         planned_date DATE NOT NULL,
         status VARCHAR(20) DEFAULT 'planned',
         notes TEXT,
@@ -232,7 +235,7 @@ const migrations = [
       -- Create health_records table
       CREATE TABLE IF NOT EXISTS health_records (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        rabbit_id UUID REFERENCES rabbits(id) ON DELETE CASCADE,
+        rabbit_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         type VARCHAR(20) NOT NULL,
         description TEXT NOT NULL,
         date DATE NOT NULL,
@@ -249,7 +252,7 @@ const migrations = [
       CREATE TABLE IF NOT EXISTS health_alerts (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
-        rabbit_id UUID REFERENCES rabbits(id) ON DELETE CASCADE,
+        rabbit_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         alert_type VARCHAR(50) NOT NULL,
         severity VARCHAR(20) DEFAULT 'medium',
         message TEXT NOT NULL,
@@ -289,7 +292,7 @@ const migrations = [
       -- Create feeding_schedules table
       CREATE TABLE IF NOT EXISTS feeding_schedules (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        rabbit_id UUID REFERENCES rabbits(id) ON DELETE CASCADE,
+        rabbit_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         daily_amount VARCHAR(50) NOT NULL,
         feed_type VARCHAR(50) NOT NULL,
         times JSONB NOT NULL,
@@ -304,7 +307,7 @@ const migrations = [
       -- Create feeding_records table
       CREATE TABLE IF NOT EXISTS feeding_records (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        rabbit_id UUID REFERENCES rabbits(id) ON DELETE CASCADE,
+        rabbit_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         hutch_id VARCHAR(50) REFERENCES hutches(id),
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
         feed_type VARCHAR(50) NOT NULL,
@@ -350,7 +353,7 @@ const migrations = [
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
         type VARCHAR(20) NOT NULL,
-        rabbit_id UUID REFERENCES rabbits(id),
+        rabbit_id VARCHAR(20) REFERENCES rabbits(rabbit_id),
         amount DECIMAL(12,2) NOT NULL,
         currency VARCHAR(3) DEFAULT 'USD',
         date DATE NOT NULL,
@@ -383,7 +386,7 @@ const migrations = [
       -- Create removal_records table
       CREATE TABLE IF NOT EXISTS removal_records (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        rabbit_id UUID REFERENCES rabbits(id) ON DELETE CASCADE,
+        rabbit_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         hutch_id VARCHAR(50) REFERENCES hutches(id),
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
         reason VARCHAR(100) NOT NULL,
@@ -592,19 +595,19 @@ const migrations = [
       DROP TRIGGER IF EXISTS update_hutches_occupied ON hutches;
 
       -- Drop functions
-      DROP FUNCTION IF EXISTS update_updated_at_column();
-      DROP FUNCTION IF EXISTS update_row_occupied();
+      DROP FUNCTION IF EXISTS update_updated;
+      DROP FUNCTION IF EXISTS update_row_occupied;
 
       -- Drop indexes
       DROP INDEX IF EXISTS idx_users_email;
       DROP INDEX IF EXISTS idx_users_farm_id;
       DROP INDEX IF EXISTS idx_rabbits_farm_id;
-      DROP INDEX IF EXISTS idx_rabbits_rabbit_id;
+      DROP INDEX IF EXISTS idx_rabbits_id;
       DROP INDEX IF EXISTS idx_rabbits_hutch_id;
       DROP INDEX IF EXISTS idx_rabbits_status;
       DROP INDEX IF EXISTS idx_hutches_row_name;
-      DROP INDEX IF EXISTS idx_hutches_farm_id;
-      DROP INDEX IF EXISTS idx_hutches_is_occupied;
+      DROP INDEX idx_hutches_farm_id;
+      DROP INDEX IF EXISTS idx_hutches_id_occupied;
       DROP INDEX IF EXISTS idx_rows_farm_id;
       DROP INDEX IF EXISTS idx_hutch_rabbit_history_hutch_id;
       DROP INDEX IF EXISTS idx_hutch_rabbit_history_rabbit_id;
@@ -629,24 +632,31 @@ const migrations = [
 ];
 
 async function runMigrations() {
-  const client = await pool.connect();
+  let client;
 
   try {
+    // Verify database connection
+    client = await pool.connect();
+    logger.info('Successfully connected to the database');
+
+    // Create migrations table
     await client.query(`
       CREATE TABLE IF NOT EXISTS migrations (
         id SERIAL PRIMARY KEY,
         version INTEGER NOT NULL UNIQUE,
         name VARCHAR(255) NOT NULL,
         executed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      )
+      );
     `);
 
+    // Get executed migrations
     const result = await client.query('SELECT version FROM migrations ORDER BY version');
     const executedVersions = result.rows.map(row => row.version);
 
+    // Apply migrations
     for (const migration of migrations) {
       if (!executedVersions.includes(migration.version)) {
-        logger.info(`Running migration ${migration.version}: ${migration.name}`);
+        logger.info(`Applying migration ${migration.version}: ${migration.name}`);
         await client.query('BEGIN');
         try {
           await client.query(migration.up);
@@ -655,20 +665,26 @@ async function runMigrations() {
             [migration.version, migration.name]
           );
           await client.query('COMMIT');
-          logger.info(`Migration ${migration.version} completed successfully`);
-        } catch (error) {
+          logger.info(`Migration ${migration.version} applied successfully`);
+        } catch (err) {
           await client.query('ROLLBACK');
-          throw error;
+          logger.error(`Migration ${migration.version} failed: ${err.message}`);
+          throw new Error(`Migration ${migration.version} failed: ${err.message}`);
         }
+      } else {
+        logger.info(`Skipping migration ${migration.version}: already applied`);
       }
     }
 
     logger.info('All migrations completed successfully');
   } catch (error) {
-    logger.error('Migration failed:', error);
-    throw error;
+    logger.error('Migration process failed:', error.message);
+    throw new Error(`Migration process failed: ${error.message}`);
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+      logger.info('Database connection released');
+    }
   }
 }
 
