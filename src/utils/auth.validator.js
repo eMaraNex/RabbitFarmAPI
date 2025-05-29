@@ -44,11 +44,16 @@ export const forgotPasswordSchema = Joi.object({
 }).strict();
 
 export const resetPasswordSchema = Joi.object({
-    token: Joi.string().required().messages({
-        'any.required': 'Reset token is required'
+    currentPassword: Joi.string().min(6).required().messages({
+        'string.min': 'Current password must be at least 6 characters',
+        'any.required': 'Current password is required',
     }),
-    newPassword: Joi.string().min(8).required().messages({
-        'string.min': 'New password must be at least 8 characters long',
-        'any.required': 'New password is required'
-    })
+    password: Joi.string().min(6).required().messages({
+        'string.min': 'New password must be at least 6 characters',
+        'any.required': 'New password is required',
+    }),
+    newPassword: Joi.string().min(6).required().messages({
+        'string.min': 'Confirm password must be at least 6 characters',
+        'any.required': 'Confirm password is required',
+    }),
 }).strict();

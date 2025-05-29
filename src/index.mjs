@@ -134,7 +134,7 @@ async function startServer() {
         logger.info('Starting Rabbit Farm Management Server...');
 
         // Run database migrations
-        await runMigrations();
+        // await runMigrations();
 
         // Seed database if in development
         if (process.env.NODE_ENV === 'development') {

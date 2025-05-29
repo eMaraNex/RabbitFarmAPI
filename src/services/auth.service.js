@@ -129,7 +129,8 @@ class AuthService {
                 [uuidv4(), userId, token, expiresAt]
             );
 
-            const resetUrl = `${process.env.BASE_URL}/reset-password?token=${token}`;
+            const resetUrl = `${process.env.BASE_URL}/api/v1/auth/reset-password/${token}`;
+            logger.info(`Generated reset URL: ${resetUrl}`);
             const emailService = new EmailService({}, logger);
             const emailResult = await emailService.sendEmail({
                 to: email,
@@ -152,8 +153,12 @@ class AuthService {
         }
     }
 
-    static async resetPassword({ token, newPassword }) {
+    static async resetPassword({ token, currentPassword, password, newPassword }) {
         try {
+            if (password !== newPassword) {
+                throw new ValidationError('New password and confirmation do not match');
+            }
+
             const resetResult = await pool.query(
                 `SELECT user_id
          FROM password_resets
@@ -166,11 +171,27 @@ class AuthService {
             }
 
             const userId = resetResult.rows[0].user_id;
-            const passwordHash = await bcrypt.hash(newPassword, 10);
+
+            const userResult = await pool.query(
+                `SELECT password_hash
+         FROM users
+         WHERE id = $1 AND is_deleted = 0 AND is_active = true`,
+                [userId]
+            );
+
+            if (userResult.rows.length === 0) {
+                throw new NotFoundError('User not found');
+            }
+
+            const isValidPassword = await bcrypt.compare(currentPassword, userResult.rows[0].password_hash);
+            if (!isValidPassword) {
+                throw new UnauthorizedError('Incorrect current password');
+            }
+
+            const passwordHash = await bcrypt.hash(password, 10);
 
             await pool.query('BEGIN');
 
-            // Update password
             await pool.query(
                 `UPDATE users
          SET password_hash = $1, updated_at = CURRENT_TIMESTAMP
@@ -178,11 +199,10 @@ class AuthService {
                 [passwordHash, userId]
             );
 
-            // Mark reset token as used
             await pool.query(
                 `UPDATE password_resets
          SET used = true, updated_at = CURRENT_TIMESTAMP
-         WHERE token = $3`,
+         WHERE token = $1`,
                 [token]
             );
 
