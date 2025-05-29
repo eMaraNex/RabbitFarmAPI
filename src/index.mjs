@@ -14,6 +14,7 @@ import rowsRoutes from './routes/rows.routes.js';
 import hutchesRoutes from './routes/hutches.routes.js';
 import rabbitsRoutes from './routes/rabbits.routes.js';
 import authRouter from './routes/auth.routes.js';
+import earningsRoutes from './routes/earnings.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 // Load environment variables
@@ -103,6 +104,7 @@ apiRouter.use('/auth', authRouter);
 apiRouter.use('/rows', rowsRoutes);
 apiRouter.use('/hutches', hutchesRoutes);
 apiRouter.use('/rabbits', rabbitsRoutes);
+apiRouter.use('/earnings', earningsRoutes);
 
 app.use('/api/v1', apiRouter);
 

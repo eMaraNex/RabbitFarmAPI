@@ -115,7 +115,7 @@ const migrations = [
       CREATE TABLE IF NOT EXISTS rabbits (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
-        rabbit_id VARCHAR(20) NOT NULL UNIQUE,
+        rabbit_id VARCHAR(200) NOT NULL UNIQUE,
         name VARCHAR(50),
         gender VARCHAR(6) NOT NULL CHECK (gender IN ('male', 'female')),
         breed VARCHAR(50) NOT NULL,
@@ -143,8 +143,8 @@ const migrations = [
       -- Create hutch_rabbit_history table
       CREATE TABLE IF NOT EXISTS hutch_rabbit_history (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        hutch_id VARCHAR(50) REFERENCES hutches(id) NOT NULL,
-        rabbit_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        hutch_id VARCHAR(50) REFERENCES hutches(id) ON DELETE CASCADE,
+        rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
         assigned_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
         removed_at TIMESTAMP WITH TIME ZONE,
@@ -212,8 +212,8 @@ const migrations = [
       CREATE TABLE IF NOT EXISTS breeding_calendar (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
-        doe_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
-        buck_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        doe_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        buck_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         planned_date DATE NOT NULL,
         status VARCHAR(20) DEFAULT 'planned',
         notes TEXT,
@@ -235,7 +235,7 @@ const migrations = [
       -- Create health_records table
       CREATE TABLE IF NOT EXISTS health_records (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        rabbit_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         type VARCHAR(20) NOT NULL,
         description TEXT NOT NULL,
         date DATE NOT NULL,
@@ -252,7 +252,7 @@ const migrations = [
       CREATE TABLE IF NOT EXISTS health_alerts (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
-        rabbit_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         alert_type VARCHAR(50) NOT NULL,
         severity VARCHAR(20) DEFAULT 'medium',
         message TEXT NOT NULL,
@@ -292,7 +292,7 @@ const migrations = [
       -- Create feeding_schedules table
       CREATE TABLE IF NOT EXISTS feeding_schedules (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        rabbit_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         daily_amount VARCHAR(50) NOT NULL,
         feed_type VARCHAR(50) NOT NULL,
         times JSONB NOT NULL,
@@ -307,7 +307,7 @@ const migrations = [
       -- Create feeding_records table
       CREATE TABLE IF NOT EXISTS feeding_records (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        rabbit_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         hutch_id VARCHAR(50) REFERENCES hutches(id),
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
         feed_type VARCHAR(50) NOT NULL,
@@ -353,7 +353,7 @@ const migrations = [
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
         type VARCHAR(20) NOT NULL,
-        rabbit_id VARCHAR(20) REFERENCES rabbits(rabbit_id),
+        rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id),
         amount DECIMAL(12,2) NOT NULL,
         currency VARCHAR(3) DEFAULT 'USD',
         date DATE NOT NULL,
@@ -363,6 +363,7 @@ const migrations = [
         includes_manure BOOLEAN DEFAULT false,
         buyer_name VARCHAR(100),
         notes TEXT,
+        hutch_id VARCHAR(50) REFERENCES hutches(id),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -386,7 +387,7 @@ const migrations = [
       -- Create removal_records table
       CREATE TABLE IF NOT EXISTS removal_records (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        rabbit_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         hutch_id VARCHAR(50) REFERENCES hutches(id),
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
         reason VARCHAR(100) NOT NULL,

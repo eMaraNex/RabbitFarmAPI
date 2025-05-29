@@ -56,24 +56,24 @@ async function seedDatabase() {
     // Seed users
     const users = [
       {
-        email: 'admin@karaganifarm.co.ke',
-        password: 'Admin@2025',
-        name: 'John Kamau',
+        email: 'devmainamwangi@gmail.com',
+        password: 'Stoney@2021',
+        name: 'Maina Mwangi',
         phone: '+254712345678',
         role_id: roleIds['Admin'],
         farm_id: farmId
       },
       {
-        email: 'manager@karaganifarm.co.ke',
-        password: 'Manager@2025',
-        name: 'Sarah Wanjiku',
+        email: 'mainamwangiy@gmail.com',
+        password: 'Stoney@2021',
+        name: 'Maina Engineer',
         phone: '+254723456789',
         role_id: roleIds['Manager'],
         farm_id: farmId
       },
       {
         email: 'worker@karaganifarm.co.ke',
-        password: 'Worker@2025',
+        password: 'Stoney@2021',
         name: 'Peter Mwaura',
         phone: '+254734567890',
         role_id: roleIds['Worker'],
@@ -103,8 +103,7 @@ async function seedDatabase() {
 
     // Seed rows
     const rows = [
-      { name: 'Row1', farm_id: farmId, description: 'Main breeding row', capacity: 18 },
-      { name: 'Row2', farm_id: farmId, description: 'Grow-out row', capacity: 18 }
+      { name: 'Mercury', farm_id: farmId, description: 'Main breeding row', capacity: 18 }
     ];
 
     for (const row of rows) {
@@ -116,11 +115,9 @@ async function seedDatabase() {
     }
     logger.info('Rows seeded successfully');
 
-    // Seed hutches
+    // Seed hutches (Fixed to reference 'Mercury' instead of 'Row2')
     const hutches = [
-      { id: 'Row1-A1', row_name: 'Row1', farm_id: farmId, level: 'A', position: 1, size: 'medium', material: 'wire' },
-      { id: 'Row1-A2', row_name: 'Row1', farm_id: farmId, level: 'A', position: 2, size: 'medium', material: 'wire' },
-      { id: 'Row2-B1', row_name: 'Row2', farm_id: farmId, level: 'B', position: 1, size: 'large', material: 'wood' }
+      { id: 'Mercury-A1', row_name: 'Mercury', farm_id: farmId, level: 'A', position: 1, size: 'large', material: 'wood' }
     ];
 
     for (const hutch of hutches) {
@@ -141,31 +138,31 @@ async function seedDatabase() {
     }
     logger.info('Hutches seeded successfully');
 
-    // Seed rabbits
+    // Seed rabbits (Updated to reference the correct hutch_id)
     const rabbits = [
       {
         id: uuidv4(),
         farm_id: farmId,
-        rabbit_id: 'RAB001',
+        rabbit_id: 'RABBIT001',
         name: 'Luna',
         gender: 'female',
         breed: 'New Zealand White',
         color: 'White',
-        birth_date: '2024-10-01',
+        birth_date: '2024-01-01',
         weight: 4.5,
-        hutch_id: 'Row1-A1'
+        hutch_id: 'Mercury-A1',
       },
       {
         id: uuidv4(),
         farm_id: farmId,
-        rabbit_id: 'RAB002',
+        rabbit_id: 'RABBIT002',
         name: 'Max',
         gender: 'male',
-        breed: 'Californian',
-        color: 'White with black points',
-        birth_date: '2024-09-15',
-        weight: 4.2,
-        hutch_id: 'Row1-A2'
+        breed: 'New Zealand White',
+        color: 'White',
+        birth_date: '2024-01-01',
+        weight: 5.0,
+        hutch_id: null, // Max is not assigned to a hutch
       }
     ];
 
@@ -200,17 +197,18 @@ async function seedDatabase() {
         rabbit.birth_date
       ]);
 
-      // Update rabbit.id with the actual ID from the database
       rabbit.id = result.rows[0].id;
 
-      // Update hutch occupancy
-      await client.query(`
-        UPDATE hutches SET is_occupied = true WHERE id = $1
-      `, [rabbit.hutch_id]);
+      // Update hutch occupancy if hutch_id is not null
+      if (rabbit.hutch_id) {
+        await client.query(`
+          UPDATE hutches SET is_occupied = true WHERE id = $1
+        `, [rabbit.hutch_id]);
+      }
     }
     logger.info('Rabbits seeded successfully');
 
-    // Seed breeding records
+    // Seed breeding records (Using rabbit_id instead of UUID)
     await client.query(`
       INSERT INTO breeding_records (
         id, farm_id, doe_id, buck_id, mating_date, expected_birth_date
@@ -226,7 +224,7 @@ async function seedDatabase() {
     ]);
     logger.info('Breeding records seeded successfully');
 
-    // Seed feeding schedules
+    // Seed feeding schedules (Using rabbit_id instead of UUID)
     await client.query(`
       INSERT INTO feeding_schedules (
         id, rabbit_id, daily_amount, feed_type, times
@@ -234,7 +232,7 @@ async function seedDatabase() {
       ON CONFLICT (id) DO NOTHING
     `, [
       uuidv4(),
-      rabbits[0].id, // Luna
+      rabbits[0].rabbit_id, // Luna
       '150g',
       'Pellets',
       JSON.stringify(['08:00', '18:00'])
@@ -269,6 +267,7 @@ async function seedDatabase() {
     throw error;
   } finally {
     client.release();
+    logger.info('Database connection released');
   }
 }
 

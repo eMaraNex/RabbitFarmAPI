@@ -72,7 +72,7 @@ class RabbitsService {
                 await DatabaseHelper.executeQuery(
                     `INSERT INTO hutch_rabbit_history (id, hutch_id, rabbit_id, farm_id, assigned_at, created_at, is_deleted)
                  VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)`,
-                    [uuidv4(), hutch_id, rabbit.id, farm_id]
+                    [uuidv4(), hutch_id, rabbit.rabbit_id, farm_id]
                 );
             }
 
