@@ -236,7 +236,7 @@ class RabbitsService {
     }
 
     static async deleteRabbit(rabbitId, farmId, removalData, userId) {
-        const { reason, notes, sale_amount, sale_date, sale_weight, sold_to } = removalData;
+        const { reason, notes, date, sale_amount, sale_weight, sold_to, sale_notes, sale_type, hutch_id, currency } = removalData;
         if (!reason) {
             throw new ValidationError('Removal reason is required');
         }
@@ -245,7 +245,7 @@ class RabbitsService {
             await DatabaseHelper.executeQuery('BEGIN');
 
             const rabbitResult = await DatabaseHelper.executeQuery(
-                'SELECT id, hutch_id FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND is_deleted = 0',
+                'SELECT id, rabbit_id, hutch_id FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND is_deleted = 0',
                 [rabbitId, farmId]
             );
             if (rabbitResult.rows.length === 0) {
@@ -253,7 +253,7 @@ class RabbitsService {
             }
             const rabbit = rabbitResult.rows[0];
 
-            // Soft delete rabbit
+            // Soft delete rabbit using rabbit_id
             const result = await DatabaseHelper.executeQuery(
                 'UPDATE rabbits SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE rabbit_id = $1 AND farm_id = $2 AND is_deleted = 0 RETURNING *',
                 [rabbitId, farmId]
@@ -263,20 +263,45 @@ class RabbitsService {
             // Insert removal record
             await DatabaseHelper.executeQuery(
                 `INSERT INTO removal_records (id, rabbit_id, hutch_id, farm_id, reason, notes, date, sale_amount, sale_weight, sold_to, created_at, is_deleted)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, 0)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, 0)`,
                 [
-                    uuidv4(), rabbit.id, rabbit.hutch_id || null, farmId, reason, notes || null,
-                    sale_date || new Date().toISOString().split('T')[0], sale_amount || null, sale_weight || null, sold_to || null
+                    uuidv4(),
+                    rabbit.rabbit_id,
+                    hutch_id || rabbit.hutch_id || null,
+                    farmId,
+                    reason,
+                    notes || null,
+                    date,
+                    sale_amount || null,
+                    sale_weight || null,
+                    sold_to || null,
                 ]
             );
 
             // Update hutch_rabbit_history
             if (rabbit.hutch_id) {
                 await DatabaseHelper.executeQuery(
-                    `UPDATE hutch_rabbit_history SET removed_at = CURRENT_TIMESTAMP, removal_reason = $1, removal_notes = $2,
-                     sale_amount = $3, sale_date = $4, sale_weight = $5, sold_to = $6, updated_at = CURRENT_TIMESTAMP
-                     WHERE hutch_id = $7 AND rabbit_id = $8 AND farm_id = $9 AND is_deleted = 0 AND removed_at IS NULL`,
-                    [reason, notes, sale_amount, sale_date, sale_weight, sold_to, rabbit.hutch_id, rabbit.id, farmId]
+                    `UPDATE hutch_rabbit_history SET 
+                        removed_at = CURRENT_TIMESTAMP, 
+                        removal_reason = $1, 
+                        removal_notes = $2,
+                        sale_amount = $3, 
+                        sale_date = $4, 
+                        sale_weight = $5, 
+                        sold_to = $6, 
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE hutch_id = $7 AND rabbit_id = $8 AND farm_id = $9 AND is_deleted = 0 AND removed_at IS NULL`,
+                    [
+                        reason,
+                        sale_notes || notes || null,
+                        sale_amount || null,
+                        date,
+                        sale_weight || null,
+                        sold_to || null,
+                        rabbit.hutch_id,
+                        rabbit.rabbit_id,
+                        farmId,
+                    ]
                 );
 
                 // Update hutch is_occupied
@@ -293,11 +318,22 @@ class RabbitsService {
             }
 
             // Insert earnings record if sold
-            if (reason === 'sold' && sale_amount) {
+            if (reason === 'Sale' && sale_amount) {
                 await DatabaseHelper.executeQuery(
-                    `INSERT INTO earnings_records (id, farm_id, rabbit_id, type, amount, currency, date, weight, sale_type, buyer_name, created_at, is_deleted)
-                     VALUES ($1, $2, $3, 'sale', $4, 'USD', $5, $6, 'sale', $7, CURRENT_TIMESTAMP, 0)`,
-                    [uuidv4(), farmId, rabbit.id, sale_amount, sale_date || new Date().toISOString().split('T')[0], sale_weight, sold_to]
+                    `INSERT INTO earnings_records (id, farm_id, rabbit_id, type, amount, currency, date, weight, sale_type, buyer_name, notes, created_at, is_deleted)
+           VALUES ($1, $2, $3, 'rabbit_sale', $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, 0)`,
+                    [
+                        uuidv4(),
+                        farmId,
+                        rabbit.rabbit_id,
+                        sale_amount,
+                        currency || 'USD',
+                        date,
+                        sale_weight || null,
+                        sale_type || 'whole',
+                        sold_to || null,
+                        sale_notes || null,
+                    ]
                 );
             }
 

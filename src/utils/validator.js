@@ -72,10 +72,16 @@ export const rabbitUpdateSchema = Joi.object({
 });
 
 export const rabbitDeleteSchema = Joi.object({
-    reason: Joi.string().required(),
-    notes: Joi.string().allow(null),
-    sale_amount: Joi.number().allow(null),
-    sale_date: Joi.date().allow(null),
-    sale_weight: Joi.number().allow(null),
-    sold_to: Joi.string().allow(null)
-});
+    rabbit_id: Joi.string().max(20).required(),
+    hutch_id: Joi.string().max(50).required(),
+    farm_id: Joi.string().uuid().required(),
+    reason: Joi.string().max(100).required(),
+    notes: Joi.string().max(1000).allow('', null).optional(),
+    date: Joi.date().iso().required(),
+    sale_amount: Joi.number().precision(2).optional(),
+    sale_weight: Joi.number().precision(2).optional(),
+    sold_to: Joi.string().max(100).allow('', null).optional(),
+    sale_notes: Joi.string().max(1000).allow('', null).optional(),
+    currency: Joi.string().length(3).optional(),
+    sale_type: Joi.string().valid('whole', 'meat_only', 'skin_only', 'meat_and_skin').optional(),
+}).options({ stripUnknown: true });
