@@ -134,15 +134,6 @@ app.use(errorHandler);
 async function startServer() {
     try {
         logger.info('Starting Rabbit Farm Management Server...');
-
-        // Run database migrations
-        await runMigrations();
-
-        // Seed database if in development
-        if (process.env.NODE_ENV === 'development') {
-            // await seedDatabase();
-        }
-
         // Start server
         app.listen(PORT, () => {
             logger.info(`🚀 Server running on port ${PORT}`);

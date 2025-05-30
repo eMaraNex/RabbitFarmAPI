@@ -19,6 +19,12 @@ const dbConfig = {
 };
 
 // Create a connection pool
+if (process.env.NODE_ENV === 'production') {
+    dbConfig.connectionString = process.env.DATABASE_URL; // Use DATABASE_URL in production
+    dbConfig.ssl = {
+        rejectUnauthorized: false, // Allow self-signed certificates
+    };
+}
 export const pool = new Pool(dbConfig);
 
 // Test the connection on startup
