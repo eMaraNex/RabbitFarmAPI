@@ -1,19 +1,19 @@
 import pino from 'pino';
-import { createWriteStream } from 'fs';
-import { dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { mkdirSync } from 'fs';
+// import { createWriteStream } from 'fs';
+// import { dirname } from 'path';
+// import { fileURLToPath } from 'url';
+// import { mkdirSync } from 'fs';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+// const __filename = fileURLToPath(import.meta.url);
+// const __dirname = dirname(__filename);
 
-// Ensure logs directory exists
-const logsDir = process.env.LOG_DIR || 'logs';
-try {
-    mkdirSync(logsDir, { recursive: true });
-} catch (error) {
-    // Directory already exists or cannot be created
-}
+// // Ensure logs directory exists
+// const logsDir = process.env.LOG_DIR || 'logs';
+// try {
+//     mkdirSync(logsDir, { recursive: true });
+// } catch (error) {
+//     // Directory already exists or cannot be created
+// }
 
 // Create logger configuration
 const loggerConfig = {
@@ -46,23 +46,28 @@ if (process.env.NODE_ENV === 'development') {
     };
 }
 
-// Production logger with file output
+// Production logger with console output (no file writing for Vercel)
 if (process.env.NODE_ENV === 'production') {
-    const logFile = process.env.LOG_FILE || `${logsDir}/app.log`;
-    loggerConfig.transport = {
-        targets: [
-            {
-                target: 'pino/file',
-                options: { destination: logFile },
-                level: 'info',
-            },
-            {
-                target: 'pino/file',
-                options: { destination: `${logsDir}/error.log` },
-                level: 'error',
-            },
-        ],
+    // Vercel captures console output, so we log to stdout
+    // No transport needed; pino logs to console by default
+    loggerConfig.base = {
+        name: 'rabbit-farm-backend',
     };
+    //     const logFile = process.env.LOG_FILE || `${logsDir}/app.log`;
+    // loggerConfig.transport = {
+    //     targets: [
+    //         {
+    //             target: 'pino/file',
+    //             options: { destination: logFile },
+    //             level: 'info',
+    //         },
+    //         {
+    //             target: 'pino/file',
+    //             options: { destination: `${logsDir}/error.log` },
+    //             level: 'error',
+    //         },
+    //     ],
+    // };
 }
 
 const logger = pino(loggerConfig);
