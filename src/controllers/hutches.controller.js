@@ -80,21 +80,36 @@ class HutchesController {
         }
     }
 
-    static async deleteHutch(req, res, next) {
+    static async getHutchRemovedRabbitHistory(req, res, next) {
         try {
-            const { id, farmId } = req.params;
-            const userId = req.user?.id;
-            if (!userId) {
-                throw new ValidationError('User not authenticated');
-            }
-            if (!farmId || !id) {
-                throw new ValidationError('Missing farmId or hutch id');
-            }
-            const hutch = await HutchesService.deleteHutch(id, farmId, userId);
-            return SuccessResponse(res, 200, 'Hutch deleted successfully', hutch)
+            const { farmId, hutchId } = req.params;
+            const history = await HutchesService.getHutchRemovedRabbitHistory(farmId, hutchId);
+            return SuccessResponse(res, 200, 'Hutch rabbit history retrieved successfully', history)
         } catch (error) {
-            logger.error(`Delete hutch error: ${error.message}`);
+            logger.error(`Retrieving hutch history error: ${error.message}`);
             next(error);
+        }
+    }
+
+    static async deleteHutch(id, farmId, userId) {
+        try {
+            await DatabaseHelper.executeQuery('BEGIN');
+
+            const result = await DatabaseHelper.executeQuery(
+                'UPDATE hutches SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND farm_id = $2 AND is_deleted = 0 RETURNING *',
+                [id, farmId]
+            );
+            if (result.rows.length === 0) {
+                throw new ValidationError('Hutch not found');
+            }
+
+            await DatabaseHelper.executeQuery('COMMIT');
+            logger.info(`Hutch ${id} soft deleted by user ${userId}`);
+            return result.rows[0];
+        } catch (error) {
+            await DatabaseHelper.executeQuery('ROLLBACK');
+            logger.error(`Error deleting hutch ${id}: ${error.message}`);
+            throw error;
         }
     }
 }

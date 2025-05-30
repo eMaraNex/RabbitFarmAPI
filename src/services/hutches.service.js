@@ -202,6 +202,21 @@ class HutchesService {
             throw error;
         }
     }
+
+    static async getHutchRemovedRabbitHistory(farm_id, hutch_id) {
+        try {
+            const result = await DatabaseHelper.executeQuery(
+                `SELECT * FROM hutch_rabbit_history
+                 WHERE farm_id = $1 AND hutch_id = $2 AND is_deleted = 0
+                 ORDER BY updated_at DESC`,
+                [farm_id, hutch_id]
+            );
+            return result.rows;
+        } catch (error) {
+            logger.error(`Error fetching hutch data history for ${hutch_id}: ${error.message}`);
+            throw error;
+        }
+    }
 }
 
 export default HutchesService;

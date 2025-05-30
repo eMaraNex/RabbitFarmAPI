@@ -23,12 +23,7 @@ class EarningsService {
         if (!farm_id || !type || !amount || !date) {
             throw new ValidationError('Missing required earnings fields');
         }
-        if (!['rabbit_sale', 'urine_sale', 'manure_sale', 'other'].includes(type)) {
-            throw new ValidationError('Type must be rabbit_sale, urine_sale, manure_sale, or other');
-        }
-        if (sale_type && !['whole', 'processed', 'live'].includes(sale_type)) {
-            throw new ValidationError('Sale type must be whole, processed, or live');
-        }
+
         if (currency && !/^[A-Z]{3}$/.test(currency)) {
             throw new ValidationError('Currency must be a valid 3-letter code');
         }
@@ -40,15 +35,15 @@ class EarningsService {
             await DatabaseHelper.executeQuery('BEGIN');
 
             // Validate rabbit_id if provided
-            if (rabbit_id) {
-                const rabbitResult = await DatabaseHelper.executeQuery(
-                    'SELECT 1 FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND is_deleted = 0',
-                    [rabbit_id, farm_id]
-                );
-                if (rabbitResult.rows.length === 0) {
-                    throw new ValidationError('Rabbit not found');
-                }
-            }
+            // if (rabbit_id) {
+            //     const rabbitResult = await DatabaseHelper.executeQuery(
+            //         'SELECT 1 FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND is_deleted = 0',
+            //         [rabbit_id, farm_id]
+            //     );
+            //     if (rabbitResult.rows.length === 0) {
+            //         throw new ValidationError('Rabbit not found');
+            //     }
+            // }
 
             // Validate hutch_id if provided
             if (hutch_id) {
