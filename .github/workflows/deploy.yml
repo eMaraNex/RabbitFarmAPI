@@ -29,4 +29,4 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NODE_ENV: production
-        run: node runSetUp.js
+        run: curl -X POST https://rabbit-farm-api.vercel.app/api/deploy/migrate -v
