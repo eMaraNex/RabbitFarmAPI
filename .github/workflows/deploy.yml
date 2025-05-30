@@ -15,7 +15,7 @@ jobs:
         with:
           node-version: '20'
       - name: Install dependencies
-        run: yarn add --frozen-lockfile
+        run: yarn
       - name: Run migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
