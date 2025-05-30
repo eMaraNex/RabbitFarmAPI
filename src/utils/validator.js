@@ -72,10 +72,47 @@ export const rabbitUpdateSchema = Joi.object({
 });
 
 export const rabbitDeleteSchema = Joi.object({
-    reason: Joi.string().required(),
-    notes: Joi.string().allow(null),
-    sale_amount: Joi.number().allow(null),
-    sale_date: Joi.date().allow(null),
-    sale_weight: Joi.number().allow(null),
-    sold_to: Joi.string().allow(null)
+    rabbit_id: Joi.string().max(20).required(),
+    hutch_id: Joi.string().max(50).required(),
+    farm_id: Joi.string().uuid().required(),
+    reason: Joi.string().max(100).required(),
+    notes: Joi.string().max(1000).allow('', null).optional(),
+    date: Joi.date().iso().required(),
+    sale_amount: Joi.number().precision(2).optional(),
+    sale_weight: Joi.number().precision(2).optional(),
+    sold_to: Joi.string().max(100).allow('', null).optional(),
+    sale_notes: Joi.string().max(1000).allow('', null).optional(),
+    currency: Joi.string().length(3).optional(),
+    sale_type: Joi.string().valid('whole', 'meat_only', 'skin_only', 'meat_and_skin').optional(),
+}).options({ stripUnknown: true });
+
+export const earningsSchema = Joi.object({
+    farm_id: Joi.string().uuid().required(),
+    type: Joi.string().valid('rabbit_sale', 'urine_sale', 'manure_sale', 'other').required(),
+    rabbit_id: Joi.string().max(200).optional().allow(null), // Changed max to 200
+    amount: Joi.number().positive().required(),
+    currency: Joi.string().length(3).pattern(/^[A-Z]{3}$/).default('USD'),
+    date: Joi.date().required(),
+    weight: Joi.number().optional().allow(null),
+    sale_type: Joi.string().optional().allow(null),
+    includes_urine: Joi.boolean().default(false),
+    includes_manure: Joi.boolean().default(false),
+    buyer_name: Joi.string().max(100).optional().allow(null),
+    notes: Joi.string().optional().allow(null),
+    hutch_id: Joi.string().optional().allow(null),
+});
+
+export const earningsUpdateSchema = Joi.object({
+    type: Joi.string().valid('rabbit_sale', 'urine_sale', 'manure_sale', 'other').optional(),
+    rabbit_id: Joi.string().max(200).optional().allow(null), // Changed max to 200
+    amount: Joi.number().positive().optional(),
+    currency: Joi.string().length(3).pattern(/^[A-Z]{3}$/).optional(),
+    date: Joi.date().optional(),
+    weight: Joi.number().optional().allow(null),
+    sale_type: Joi.string().optional().allow(null),
+    includes_urine: Joi.boolean().optional(),
+    includes_manure: Joi.boolean().optional(),
+    buyer_name: Joi.string().max(100).optional().allow(null),
+    notes: Joi.string().optional().allow(null),
+    hutch_id: Joi.string().optional().allow(null),
 });

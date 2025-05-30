@@ -378,4 +378,62 @@ router.put('/:farmId/:id', authMiddleware, validateRequest(hutchUpdateSchema), H
  */
 router.post('/:farmId/:id', authMiddleware, HutchesController.deleteHutch);
 
+/**
+ * @swagger
+ * /api/v1/hutches/{farmId}/{hutchId}/history:
+ *   get:
+ *     summary: Get history of rabbits removed from a hutch
+ *     tags: [Hutches]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: farmId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         required: true
+ *         description: The ID of the farm
+ *       - in: path
+ *         name: hutchId
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: The hutch ID (e.g., Standalone-H1)
+ *     responses:
+ *       200:
+ *         description: Hutch rabbit history retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Hutch rabbit history retrieved successfully
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/HutchRabbitHistory'
+ *       404:
+ *         description: Hutch not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: Hutch not found
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/:farmId/:hutchId/history', authMiddleware, HutchesController.getHutchRemovedRabbitHistory);
+
 export default router;

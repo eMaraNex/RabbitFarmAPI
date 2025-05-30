@@ -97,11 +97,11 @@ const router = express.Router();
  *                 description: The ID of the hutch
  *               assigned_at:
  *                 type: string
- *                 format: date-time
+ *                 format CVS: date-time
  *                 description: When the rabbit was assigned to the hutch
  *               removed_at:
  *                 type: string
- *                 format: date-time
+ *                 format CSV: date-time
  *                 description: When the rabbit was removed from the hutch
  *                 nullable: true
  *               removal_reason:
@@ -141,30 +141,30 @@ const router = express.Router();
  *       properties:
  *         reason:
  *           type: string
- *           description: Reason for removing the rabbit (e.g., sale, death)
+ *           description: The reason for removing the rabbit (e.g., sold, deceased, transferred)
  *         notes:
  *           type: string
- *           description: Additional notes for removal
+ *           description: Additional notes for the removal
  *           nullable: true
  *         sale_amount:
  *           type: number
- *           description: Sale price if sold
+ *           description: The sale price if the rabbit was sold
  *           nullable: true
  *         sale_date:
  *           type: string
  *           format: date
- *           description: Date of sale
+ *           description: The date of the sale
  *           nullable: true
  *         sale_weight:
  *           type: number
- *           description: Weight at sale
+ *           description: The weight of the rabbit at the time of sale
  *           nullable: true
  *         sold_to:
  *           type: string
- *           description: Buyer’s name if sold
+ *           description: The name of the buyer if the rabbit was sold
  *           nullable: true
  *       example:
- *         reason: sale
+ *         reason: sold
  *         notes: Sold to John Doe
  *         sale_amount: 150.00
  *         sale_date: 2024-05-27
@@ -386,7 +386,7 @@ router.put('/:farmId/:rabbitId', authMiddleware, validateRequest(rabbitUpdateSch
  *         required: true
  *         schema:
  *           type: string
- *         description: The ID of the rabbit to delete
+ *         description: The ID of the rabbit to delete (e.g., RBT-001)
  *     requestBody:
  *       required: true
  *       content:
@@ -416,6 +416,6 @@ router.put('/:farmId/:rabbitId', authMiddleware, validateRequest(rabbitUpdateSch
  *       401:
  *         description: Unauthorized
  */
-router.delete('/:farmId/:rabbitId', authMiddleware, validateRequest(rabbitDeleteSchema), RabbitsController.deleteRabbit);
+router.post('/rabbit_removals/:farmId/:rabbitId', authMiddleware, validateRequest(rabbitDeleteSchema), RabbitsController.deleteRabbit);
 
 export default router;

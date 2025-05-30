@@ -232,8 +232,8 @@ router.post('/forgot-password', rateLimitMiddleware(3, 60 * 1000), validateReque
  *       401:
  *         description: Invalid or expired token
  */
-router.post('/reset-password', validateRequest(resetPasswordSchema), AuthController.resetPassword);
-
+router.post('/reset-password/:token', validateRequest(resetPasswordSchema), AuthController.resetPassword);
+router.get('/reset-password/:token', AuthController.validateResetToken);
 /**
  * @swagger
  * /api/v1/auth/logout:
