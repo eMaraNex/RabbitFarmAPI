@@ -8,8 +8,6 @@ import dotenv from 'dotenv';
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 import logger from './middleware/logger.js';
-import runMigrations from './database/migrate.js';
-import seedDatabase from './database/seed.js';
 import rowsRoutes from './routes/rows.routes.js';
 import hutchesRoutes from './routes/hutches.routes.js';
 import rabbitsRoutes from './routes/rabbits.routes.js';
@@ -17,6 +15,7 @@ import authRouter from './routes/auth.routes.js';
 import earningsRoutes from './routes/earnings.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { runSetUp } from './database/runSetup.js';
+import bodyParser from 'body-parser';
 
 // Load environment variables
 dotenv.config();
@@ -66,13 +65,10 @@ app.use(helmet({
     },
 }));
 
-// CORS configuration
-app.use(cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-}));
+app.use(cors());
+app.use(bodyParser.json());
+app.use(express.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
 // Rate limiting
 const limiter = rateLimit({
