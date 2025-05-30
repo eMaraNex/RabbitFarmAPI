@@ -23,8 +23,6 @@ jobs:
             ${{ runner.os }}-yarn-
       - name: Install dependencies
         run: yarn install --production
-      - name: Verify runSetUp.js exists
-        run: ls runSetUp.js || (echo "runSetUp.js not found!" && exit 1)
       - name: Run migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
