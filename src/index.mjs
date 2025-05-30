@@ -111,6 +111,14 @@ apiRouter.use('/earnings', earningsRoutes);
 
 app.use('/api/v1', apiRouter);
 
+// get homepage
+app.get('/', (req, res) => {
+    res.status(200).json({
+        success: true,
+        message: 'Welcome to Rabbit Farm Management API',
+        documentation: 'Visit /api-docs for API documentation',
+    });
+});
 
 // 404 handler
 app.use('*', (req, res) => {
