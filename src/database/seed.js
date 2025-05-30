@@ -57,7 +57,7 @@ async function seedDatabase() {
     const users = [
       {
         email: 'devmainamwangi@gmail.com',
-        password: 'Stoney@2021',
+        password: process.env.PASSWORD,
         name: 'Maina Mwangi',
         phone: '+254712345678',
         role_id: roleIds['Admin'],
@@ -65,7 +65,7 @@ async function seedDatabase() {
       },
       {
         email: 'mainamwangiy@gmail.com',
-        password: 'Stoney@2021',
+        password: process.env.PASSWORD,
         name: 'Maina Engineer',
         phone: '+254723456789',
         role_id: roleIds['Manager'],
@@ -73,7 +73,7 @@ async function seedDatabase() {
       },
       {
         email: 'worker@karaganifarm.co.ke',
-        password: 'Stoney@2021',
+        password: process.env.PASSWORD,
         name: 'Peter Mwaura',
         phone: '+254734567890',
         role_id: roleIds['Worker'],
