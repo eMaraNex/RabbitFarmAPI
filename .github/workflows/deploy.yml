@@ -24,9 +24,9 @@ jobs:
       - name: Install dependencies
         run: yarn install --production
       - name: Verify runSetUp.js exists
-        run: ls src/database/runSetUp.js || (echo "runSetUp.js not found!" && exit 1)
+        run: ls runSetUp.js || (echo "runSetUp.js not found!" && exit 1)
       - name: Run migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NODE_ENV: production
-        run: node src/database/runSetUp.js
+        run: node runSetUp.js
