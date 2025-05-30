@@ -1,22 +1,15 @@
 import runMigrations from "./migrate.js";
 import seedDatabase from "./seed.js";
+import logger from '../middleware/logger.js';
 
-
-export const runSetUp = async () => {
+export const runSetUp = async (req, res) => {
     try {
         await runMigrations();
-        if (process.env.NODE_ENV === 'development') {
-            await seedDatabase();
-        } else {
-            // logger.log('Skipping database seeding in production');
-        }
+        await seedDatabase();
+        logger.info('Database setup completed successfully');
+        return res.status(200).json({ message: 'Database migrations and seeding completed successfully' });
     } catch (error) {
-        // logger.error('Migration/Seeding failed:', error.message);
-        process.exit(1);
+        logger.error('Database setup failed:', error.message);
+        return res.status(500).json({ error: 'Database setup failed', details: error.message });
     }
 };
-
-runSetUp().catch((error) => {
-    // logger.error('Unexpected error:', error.message);
-    process.exit(1);
-});
