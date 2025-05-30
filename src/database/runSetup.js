@@ -2,7 +2,7 @@ import runMigrations from "./migrate.js";
 import seedDatabase from "./seed.js";
 
 
-const runSetUp = async () => {
+export const runSetUp = async () => {
     try {
         await runMigrations();
         if (process.env.NODE_ENV === 'development') {
