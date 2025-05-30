@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { runMigrations } from '../controllers/migrations.controller';
+import { runMigrations } from '../controllers/migrations.controller.js';
 
 const router = Router();
 
