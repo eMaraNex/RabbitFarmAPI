@@ -2,7 +2,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../config/database.js';
-import EmailService from './email.service.js';
+import EmailService from './email.services.js';
 import logger from '../middleware/logger.js';
 import { ValidationError, NotFoundError, UnauthorizedError } from '../middleware/errors.js';
 

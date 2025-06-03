@@ -1,5 +1,5 @@
 import express from 'express';
-import AuthController from '../controllers/auth.controller.js';
+import AuthController from '../controllers/auth.controllers.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema } from '../utils/auth.validator.js';
 import rateLimitMiddleware from '../middleware/rate-limit.middleware.js';

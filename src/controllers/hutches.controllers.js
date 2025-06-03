@@ -1,4 +1,4 @@
-import HutchesService from '../services/hutches.service.js';
+import HutchesService from '../services/hutches.services.js';
 import { SuccessResponse } from '../middleware/responses.js';
 import logger from '../middleware/logger.js';
 import { ValidationError } from '../middleware/errors.js';

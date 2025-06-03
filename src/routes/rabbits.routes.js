@@ -1,5 +1,5 @@
 import express from 'express';
-import RabbitsController from '../controllers/rabbits.controller.js';
+import RabbitsController from '../controllers/rabbits.controllers.js';
 import authMiddleware from '../middleware/auth.middleware.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import { rabbitSchema, rabbitUpdateSchema, rabbitDeleteSchema } from '../utils/validator.js';
