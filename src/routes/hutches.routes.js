@@ -1,5 +1,5 @@
 import express from 'express';
-import HutchesController from '../controllers/hutches.controller.js';
+import HutchesController from '../controllers/hutches.controllers.js';
 // import authMiddleware from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import { hutchSchema, hutchUpdateSchema } from '../utils/validator.js';

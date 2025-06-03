@@ -116,3 +116,90 @@ export const earningsUpdateSchema = Joi.object({
     notes: Joi.string().optional().allow(null),
     hutch_id: Joi.string().optional().allow(null),
 });
+
+export const breedingSchema = Joi.object({
+    farm_id: Joi.string().uuid().required().messages({
+        'string.uuid': 'farm_id must be a valid UUID',
+        'any.required': 'farm_id is required'
+    }),
+    doe_id: Joi.string().max(20).required().messages({
+        'string.max': 'doe_id must not exceed 20 characters',
+        'any.required': 'doe_id is required'
+    }),
+    buck_id: Joi.string().max(20).required().messages({
+        'string.max': 'buck_id must not exceed 20 characters',
+        'any.required': 'buck_id is required'
+    }),
+    mating_date: Joi.date().required().messages({
+        'date.base': 'mating_date must be a valid date',
+        'any.required': 'mating_date is required'
+    }),
+    expected_birth_date: Joi.date().allow(null).optional().messages({
+        'date.base': 'expected_birth_date must be a valid date'
+    }),
+    notes: Joi.string().allow(null).optional().messages({
+        'string.base': 'notes must be a string'
+    })
+});
+
+export const breedingUpdateSchema = Joi.object({
+    actual_birth_date: Joi.date().allow(null).optional().messages({
+        'date.base': 'actual_birth_date must be a valid date'
+    }),
+    number_of_kits: Joi.number().integer().min(0).allow(null).optional().messages({
+        'number.base': 'number_of_kits must be a number',
+        'number.integer': 'number_of_kits must be an integer',
+        'number.min': 'number_of_kits must be greater than or equal to 0'
+    }),
+    notes: Joi.string().allow(null).optional().messages({
+        'string.base': 'notes must be a string'
+    })
+}).min(1).messages({
+    'object.min': 'At least one field is required for update'
+});
+
+export const kitSchema = Joi.object({
+    breeding_record_id: Joi.string().uuid().required().messages({
+        'string.uuid': 'breeding_record_id must be a valid UUID',
+        'any.required': 'breeding_record_id is required'
+    }),
+    kit_number: Joi.number().integer().min(1).required().messages({
+        'number.base': 'kit_number must be a number',
+        'number.integer': 'kit_number must be an integer',
+        'number.min': 'kit_number must be at least 1',
+        'any.required': 'kit_number is required'
+    }),
+    birth_weight: Joi.number().precision(2).positive().allow(null).optional().messages({
+        'number.base': 'birth_weight must be a number',
+        'number.precision': 'birth_weight must have at most 2 decimal places',
+        'number.positive': 'birth_weight must be a positive number'
+    }),
+    gender: Joi.string().valid('male', 'female').allow(null).optional().messages({
+        'any.only': 'gender must be either "male" or "female"'
+    }),
+    color: Joi.string().max(50).allow(null).optional().messages({
+        'string.max': 'color must not exceed 50 characters'
+    }),
+    status: Joi.string().max(20).allow(null).optional().messages({
+        'string.max': 'status must not exceed 20 characters'
+    }),
+    notes: Joi.string().allow(null).optional().messages({
+        'string.base': 'notes must be a string'
+    })
+});
+
+export const kitUpdateSchema = Joi.object({
+    weaning_weight: Joi.number().precision(2).positive().allow(null).optional().messages({
+        'number.base': 'weaning_weight must be a number',
+        'number.precision': 'weaning_weight must have at most 2 decimal places',
+        'number.positive': 'weaning_weight must be a positive number'
+    }),
+    status: Joi.string().max(20).allow(null).optional().messages({
+        'string.max': 'status must not exceed 20 characters'
+    }),
+    notes: Joi.string().allow(null).optional().messages({
+        'string.base': 'notes must be a string'
+    })
+}).min(1).messages({
+    'object.min': 'At least one field is required for update'
+});

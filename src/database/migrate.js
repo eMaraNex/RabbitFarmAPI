@@ -179,13 +179,14 @@ const migrations = [
       CREATE TABLE IF NOT EXISTS breeding_records (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
-        doe_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
-        buck_id VARCHAR(20) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        doe_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        buck_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         mating_date DATE NOT NULL,
         expected_birth_date DATE,
         actual_birth_date DATE,
         number_of_kits INTEGER,
         notes TEXT,
+        alert_date DATE,
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -596,19 +597,19 @@ const migrations = [
       DROP TRIGGER IF EXISTS update_hutches_occupied ON hutches;
 
       -- Drop functions
-      DROP FUNCTION IF EXISTS update_updated;
+      DROP FUNCTION IF EXISTS update_updated_at_column;
       DROP FUNCTION IF EXISTS update_row_occupied;
 
       -- Drop indexes
       DROP INDEX IF EXISTS idx_users_email;
       DROP INDEX IF EXISTS idx_users_farm_id;
       DROP INDEX IF EXISTS idx_rabbits_farm_id;
-      DROP INDEX IF EXISTS idx_rabbits_id;
+      DROP INDEX IF EXISTS idx_rabbits_rabbit_id;
       DROP INDEX IF EXISTS idx_rabbits_hutch_id;
       DROP INDEX IF EXISTS idx_rabbits_status;
       DROP INDEX IF EXISTS idx_hutches_row_name;
-      DROP INDEX idx_hutches_farm_id;
-      DROP INDEX IF EXISTS idx_hutches_id_occupied;
+      DROP INDEX IF EXISTS idx_hutches_farm_id;
+      DROP INDEX IF EXISTS idx_hutches_is_occupied;
       DROP INDEX IF EXISTS idx_rows_farm_id;
       DROP INDEX IF EXISTS idx_hutch_rabbit_history_hutch_id;
       DROP INDEX IF EXISTS idx_hutch_rabbit_history_rabbit_id;

@@ -1,5 +1,5 @@
 import express from 'express';
-import RowsController from '../controllers/rows.controller.js';
+import RowsController from '../controllers/rows.controllers.js';
 // import authMiddleware from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import { rowSchema, rowUpdateSchema } from '../utils/validator.js';

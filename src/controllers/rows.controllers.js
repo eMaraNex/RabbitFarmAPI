@@ -1,4 +1,4 @@
-import RowsService from '../services/rows.service.js';
+import RowsService from '../services/rows.services.js';
 import { SuccessResponse } from '../middleware/responses.js';
 import logger from '../middleware/logger.js';
 

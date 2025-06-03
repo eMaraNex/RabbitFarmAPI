@@ -1,4 +1,4 @@
-import AuthService from '../services/auth.service.js';
+import AuthService from '../services/auth.services.js';
 import logger from '../middleware/logger.js';
 import { SuccessResponse } from '../middleware/responses.js';
 import { ValidationError } from '../middleware/errors.js';

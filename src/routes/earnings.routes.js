@@ -1,5 +1,5 @@
 import express from 'express';
-import EarningsController from '../controllers/earnings.controller.js';
+import EarningsController from '../controllers/earnings.controllers.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import { earningsSchema, earningsUpdateSchema } from '../utils/validator.js';
 import authMiddleware from '../middleware/auth.middleware.js';

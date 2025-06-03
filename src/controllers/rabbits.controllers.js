@@ -1,4 +1,4 @@
-import RabbitsService from '../services/rabbits.service.js';
+import RabbitsService from '../services/rabbits.services.js';
 import { SuccessResponse } from '../middleware/responses.js';
 import logger from '../middleware/logger.js';
 
