@@ -86,6 +86,7 @@ const migrations = [
         name VARCHAR(50) PRIMARY KEY,
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
         description TEXT,
+        levels TEXT[] NOT NULL DEFAULT ARRAY['A', 'B', 'C']::TEXT[],
         capacity INTEGER NOT NULL DEFAULT 18,
         occupied INTEGER DEFAULT 0 CHECK (occupied <= capacity),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),

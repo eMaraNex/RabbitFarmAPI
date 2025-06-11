@@ -1,8 +1,7 @@
 import express from 'express';
 import RowsController from '../controllers/rows.controllers.js';
-// import authMiddleware from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validateRequest.js';
-import { rowSchema, rowUpdateSchema } from '../utils/validator.js';
+import { rowSchema, rowUpdateSchema, rowExpandSchema } from '../utils/validator.js';
 import authMiddleware from '../middleware/auth.middleware.js';
 
 const router = express.Router();
@@ -56,6 +55,28 @@ const router = express.Router();
  *         is_deleted: 0
  *         created_at: 2024-01-01T00:00:00Z
  *         updated_at: 2024-01-01T00:05:00Z
+ *     RowExpand:
+ *       type: object
+ *       required:
+ *         - name
+ *         - farm_id
+ *         - additionalCapacity
+ *       properties:
+ *         name:
+ *           type: string
+ *           description: The name of the row to expand
+ *         farm_id:
+ *           type: string
+ *           format: uuid
+ *           description: The ID of the farm
+ *         additionalCapacity:
+ *           type: integer
+ *           description: Number of additional hutches to add to the row's capacity
+ *           minimum: 1
+ *       example:
+ *         name: Venus
+ *         farm_id: 123e4567-e89b-12d3-a456-426614174000
+ *         additionalCapacity: 6
  *   securitySchemes:
  *     bearerAuth:
  *       type: http
@@ -289,6 +310,45 @@ router.put('/:farmId/:name', authMiddleware, validateRequest(rowUpdateSchema), R
  *       401:
  *         description: Unauthorized
  */
-router.post('/:farmId/:name', authMiddleware, RowsController.deleteRow);
+router.delete('/:farmId/:name', authMiddleware, RowsController.deleteRow);
+
+/**
+ * @swagger
+ * /api/v1/rows/expand:
+ *   post:
+ *     summary: Expand the capacity of a row
+ *     tags: [Rows]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/RowExpand'
+ *     responses:
+ *       200:
+ *         description: Row capacity expanded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Row capacity expanded successfully
+ *                 data:
+ *                   $ref: '#/components/schemas/Row'
+ *       400:
+ *         description: Invalid input
+ *       404:
+ *         description: Row not found
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/expand', authMiddleware, validateRequest(rowExpandSchema), RowsController.expandRowCapacity);
 
 export default router;

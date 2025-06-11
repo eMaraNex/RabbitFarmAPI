@@ -61,6 +61,21 @@ class RowsController {
             next(error);
         }
     }
+
+    static async expandRowCapacity(req, res, next) {
+        try {
+            const { name, farm_id: farmId, additionalCapacity } = req.body;
+            const userId = req.userId;
+            const updatedRow = await RowsService.expandRowCapacity(name, farmId, additionalCapacity, userId);
+            res.status(200).json({
+                success: true,
+                message: 'Row capacity expanded successfully',
+                data: updatedRow,
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 export default RowsController;

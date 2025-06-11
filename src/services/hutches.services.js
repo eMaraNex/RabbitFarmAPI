@@ -4,26 +4,34 @@ import { ValidationError } from '../middleware/errors.js';
 
 class HutchesService {
     static async createHutch(hutchData, userId) {
-        const { farm_id, id, row_name, level, position, size, material, features, last_cleaned } = hutchData;
+        const { farm_id, id, row_name, level, position, size, material, features, last_cleaned, is_occupied = false, is_deleted = 0 } = hutchData;
         if (!farm_id || !id || !level || !position || !size || !material) {
             throw new ValidationError('Missing required hutch fields');
+        }
+        if (typeof is_occupied !== 'boolean') {
+            throw new ValidationError('is_occupied must be a boolean');
+        }
+        if (![0, 1].includes(is_deleted)) {
+            throw new ValidationError('is_deleted must be 0 or 1');
         }
 
         try {
             await DatabaseHelper.executeQuery('BEGIN');
 
-            // Validate row_name if provided
             if (row_name) {
                 const rowResult = await DatabaseHelper.executeQuery(
-                    'SELECT 1 FROM rows WHERE name = $1 AND farm_id = $2 AND is_deleted = 0',
+                    'SELECT levels FROM rows WHERE name = $1 AND farm_id = $2 AND is_deleted = 0',
                     [row_name, farm_id]
                 );
                 if (rowResult.rows.length === 0) {
                     throw new ValidationError('Row not found');
                 }
+                const rowLevels = rowResult.rows[0].levels || ['A', 'B', 'C'];
+                if (!rowLevels.includes(level)) {
+                    throw new ValidationError(`Level must be one of ${rowLevels.join(', ')}`);
+                }
             }
 
-            // Check if hutch exists
             const existingHutch = await DatabaseHelper.executeQuery(
                 'SELECT 1 FROM hutches WHERE id = $1 AND farm_id = $2 AND is_deleted = 0',
                 [id, farm_id]
@@ -32,14 +40,21 @@ class HutchesService {
                 throw new ValidationError('Hutch ID already exists');
             }
 
-            // Validate level
-            if (!['A', 'B', 'C'].includes(level)) {
-                throw new ValidationError('Level must be A, B, or C');
+            const rowHutches = await DatabaseHelper.executeQuery(
+                'SELECT COUNT(*) FROM hutches WHERE row_name = $1 AND farm_id = $2 AND is_deleted = 0',
+                [row_name, farm_id]
+            );
+            const rowResult = await DatabaseHelper.executeQuery(
+                'SELECT capacity FROM rows WHERE name = $1 AND farm_id = $2 AND is_deleted = 0',
+                [row_name, farm_id]
+            );
+            if (rowResult.rows.length > 0 && parseInt(rowHutches.rows[0].count) >= rowResult.rows[0].capacity) {
+                throw new ValidationError('Row capacity reached. Please expand row capacity.');
             }
 
             const result = await DatabaseHelper.executeQuery(
                 `INSERT INTO hutches (id, farm_id, row_name, level, position, size, material, features, is_occupied, last_cleaned, created_at, updated_at, is_deleted)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0) RETURNING *`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $11) RETURNING *`,
                 [
                     id,
                     farm_id,
@@ -49,8 +64,9 @@ class HutchesService {
                     size,
                     material,
                     JSON.stringify(features || ['water bottle', 'feeder']),
-                    false,
-                    last_cleaned || null
+                    is_occupied,
+                    last_cleaned || null,
+                    is_deleted
                 ]
             );
 
@@ -68,18 +84,18 @@ class HutchesService {
         try {
             const result = await DatabaseHelper.executeQuery(
                 `SELECT h.*, r.name AS row_name,
-                        (SELECT JSON_AGG(
-                            JSON_BUILD_OBJECT(
-                                'rabbit_id', r2.rabbit_id,
-                                'rabbit_name', r2.name,
-                                'hutch_id', r2.hutch_id
-                            )
-                        )
-                        FROM rabbits r2
-                        WHERE r2.hutch_id = h.id AND r2.farm_id = $2 AND r2.is_deleted = 0) AS rabbits
-                 FROM hutches h
-                 LEFT JOIN rows r ON h.row_name = r.name
-                 WHERE h.id = $1 AND h.farm_id = $2 AND h.is_deleted = 0`,
+                (SELECT JSON_AGG(
+                    JSON_BUILD_OBJECT(
+                        'rabbit_id', r2.rabbit_id,
+                        'rabbit_name', r2.name,
+                        'hutch_id', r2.hutch_id
+                    )
+                )
+                FROM rabbits r2
+                WHERE r2.hutch_id = h.id AND r2.farm_id = $2 AND r2.is_deleted = 0) AS rabbits
+         FROM hutches h
+         LEFT JOIN rows r ON h.row_name = r.name
+         WHERE h.id = $1 AND h.farm_id = $2 AND h.is_deleted = 0`,
                 [id, farmId]
             );
             if (result.rows.length === 0) {
@@ -133,27 +149,24 @@ class HutchesService {
         try {
             await DatabaseHelper.executeQuery('BEGIN');
 
-            // Validate row_name if provided
             if (row_name) {
                 const rowResult = await DatabaseHelper.executeQuery(
-                    'SELECT 1 FROM rows WHERE name = $1 AND farm_id = $2 AND is_deleted = 0',
+                    'SELECT levels FROM rows WHERE name = $1 AND farm_id = $2 AND is_deleted = 0',
                     [row_name, farmId]
                 );
                 if (rowResult.rows.length === 0) {
                     throw new ValidationError('Row not found');
                 }
-            }
-
-            // Validate level if provided
-            if (level && !['A', 'B', 'C'].includes(level)) {
-                throw new ValidationError('Level must be A, B, or C');
+                if (level && !rowResult.rows[0].levels.includes(level)) {
+                    throw new ValidationError(`Level must be one of ${rowResult.rows[0].levels.join(', ')}`);
+                }
             }
 
             const result = await DatabaseHelper.executeQuery(
                 `UPDATE hutches SET row_name = $1, level = COALESCE($2, level), position = COALESCE($3, position), 
-                 size = COALESCE($4, size), material = COALESCE($5, material), features = COALESCE($6, features), 
-                 is_occupied = COALESCE($7, is_occupied), last_cleaned = $8, updated_at = CURRENT_TIMESTAMP
-                 WHERE id = $9 AND farm_id = $10 AND is_deleted = 0 RETURNING *`,
+         size = COALESCE($4, size), material = COALESCE($5, material), features = COALESCE($6, features), 
+         is_occupied = COALESCE($7, is_occupied), last_cleaned = $8, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $9 AND farm_id = $10 AND is_deleted = 0 RETURNING *`,
                 [
                     row_name || null,
                     level,
@@ -185,6 +198,14 @@ class HutchesService {
         try {
             await DatabaseHelper.executeQuery('BEGIN');
 
+            const rabbitResult = await DatabaseHelper.executeQuery(
+                'SELECT 1 FROM rabbits WHERE hutch_id = $1 AND farm_id = $2 AND is_deleted = 0',
+                [id, farmId]
+            );
+            if (rabbitResult.rows.length > 0) {
+                throw new ValidationError('Cannot delete hutch with rabbits. Please remove rabbits first.');
+            }
+
             const result = await DatabaseHelper.executeQuery(
                 'UPDATE hutches SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND farm_id = $2 AND is_deleted = 0 RETURNING *',
                 [id, farmId]
@@ -207,8 +228,8 @@ class HutchesService {
         try {
             const result = await DatabaseHelper.executeQuery(
                 `SELECT * FROM hutch_rabbit_history
-                 WHERE farm_id = $1 AND hutch_id = $2 AND is_deleted = 0
-                 ORDER BY updated_at DESC`,
+         WHERE farm_id = $1 AND hutch_id = $2 AND is_deleted = 0
+         ORDER BY updated_at DESC`,
                 [farm_id, hutch_id]
             );
             return result.rows;

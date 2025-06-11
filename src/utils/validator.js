@@ -27,16 +27,22 @@ export const hutchUpdateSchema = Joi.object({
     is_occupied: Joi.boolean().optional(),
     last_cleaned: Joi.date().iso().allow(null).default(null).optional()
 }).strict().min(1);
-
 export const rowSchema = Joi.object({
+    name: Joi.string().trim().required(),
     farm_id: Joi.string().uuid().required(),
-    name: Joi.string().required(),
-    description: Joi.string().allow(null),
-    capacity: Joi.number().integer().min(1).required()
+    description: Joi.string().allow(null).optional(),
+    capacity: Joi.number().integer().min(1).required(),
+    levels: Joi.array().items(Joi.string()).min(1).required(),
 });
 
 export const rowUpdateSchema = Joi.object({
-    description: Joi.string().allow(null)
+    description: Joi.string().allow(null).required(),
+});
+
+export const rowExpandSchema = Joi.object({
+    name: Joi.string().trim().required(),
+    farm_id: Joi.string().uuid().required(),
+    additionalCapacity: Joi.number().integer().min(1).required(),
 });
 
 export const rabbitSchema = Joi.object({

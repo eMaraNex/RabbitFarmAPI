@@ -54,7 +54,7 @@ class HutchesController {
                 is_occupied: is_occupied === 'true' ? true : is_occupied === 'false' ? false : undefined
             };
             const hutches = await HutchesService.getAllHutches(farmId, filters);
-            return SuccessResponse(res, 200, 'Hutches retrieved successfully', hutches)
+            return SuccessResponse(res, 200, 'Hutches retrieved successfully', hutches);
         } catch (error) {
             logger.error(`Get all hutches error: ${error.message}`);
             next(error);
@@ -73,7 +73,7 @@ class HutchesController {
                 throw new ValidationError('Missing farmId or hutch id');
             }
             const hutch = await HutchesService.updateHutch(id, farmId, hutchData, userId);
-            return SuccessResponse(res, 200, 'Hutch updated successfully', hutch)
+            return SuccessResponse(res, 200, 'Hutch updated successfully', hutch);
         } catch (error) {
             logger.error(`Update hutch error: ${error.message}`);
             next(error);
@@ -83,33 +83,32 @@ class HutchesController {
     static async getHutchRemovedRabbitHistory(req, res, next) {
         try {
             const { farmId, hutchId } = req.params;
+            if (!farmId || !hutchId) {
+                throw new ValidationError('Missing farmId or hutchId');
+            }
             const history = await HutchesService.getHutchRemovedRabbitHistory(farmId, hutchId);
-            return SuccessResponse(res, 200, 'Hutch rabbit history retrieved successfully', history)
+            return SuccessResponse(res, 200, 'Hutch rabbit history retrieved successfully', history);
         } catch (error) {
             logger.error(`Retrieving hutch history error: ${error.message}`);
             next(error);
         }
     }
 
-    static async deleteHutch(id, farmId, userId) {
+    static async deleteHutch(req, res, next) {
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
-
-            const result = await DatabaseHelper.executeQuery(
-                'UPDATE hutches SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND farm_id = $2 AND is_deleted = 0 RETURNING *',
-                [id, farmId]
-            );
-            if (result.rows.length === 0) {
-                throw new ValidationError('Hutch not found');
+            const { id, farmId } = req.params;
+            const userId = req.user?.id;
+            if (!userId) {
+                throw new ValidationError('User not authenticated');
             }
-
-            await DatabaseHelper.executeQuery('COMMIT');
-            logger.info(`Hutch ${id} soft deleted by user ${userId}`);
-            return result.rows[0];
+            if (!farmId || !id) {
+                throw new ValidationError('Missing farmId or hutch id');
+            }
+            const hutch = await HutchesService.deleteHutch(id, farmId, userId);
+            return SuccessResponse(res, 200, 'Hutch deleted successfully', hutch);
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
-            logger.error(`Error deleting hutch ${id}: ${error.message}`);
-            throw error;
+            logger.error(`Delete hutch error: ${error.message}`);
+            next(error);
         }
     }
 }
