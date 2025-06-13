@@ -18,26 +18,12 @@ const migrations = [
         name VARCHAR(50) NOT NULL UNIQUE,
         description TEXT,
         permissions JSONB DEFAULT '[]',
-        is_active BOOLEAN DEFAULT true,
+        is_active INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
 
-      -- Create farms table
-      CREATE TABLE IF NOT EXISTS farms (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        name VARCHAR(100) NOT NULL,
-        location VARCHAR(200),
-        description TEXT,
-        timezone VARCHAR(50) DEFAULT 'UTC',
-        currency VARCHAR(3) DEFAULT 'USD',
-        settings JSONB DEFAULT '{}',
-        is_active BOOLEAN DEFAULT true,
-        is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
 
       -- Create users table
       CREATE TABLE IF NOT EXISTS users (
@@ -48,18 +34,45 @@ const migrations = [
         phone VARCHAR(20),
         avatar_url VARCHAR(500),
         role_id INTEGER REFERENCES roles(id),
-        farm_id UUID REFERENCES farms(id),
         email_verified BOOLEAN DEFAULT false,
         phone_verified BOOLEAN DEFAULT false,
         last_login TIMESTAMP WITH TIME ZONE,
         login_count INTEGER DEFAULT 0,
         preferences JSONB DEFAULT '{}',
-        is_active BOOLEAN DEFAULT true,
+        is_active INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+      -- Create farms table
+      -- Drop existing farms table if it has incompatible constraints
+      DROP TABLE IF EXISTS farms CASCADE;
 
+      -- Create farms table
+      CREATE TABLE IF NOT EXISTS farms (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        name VARCHAR(255) NOT NULL,
+        location VARCHAR(255),
+        latitude DECIMAL(9,2),
+        longitude DECIMAL(9,2),
+        size DECIMAL(10,2),
+        description TEXT,
+        timezone VARCHAR(255) DEFAULT 'UTC',
+        currency VARCHAR(3) DEFAULT 'USD',
+        settings JSONB DEFAULT '{}',
+        is_active INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
+        created_by UUID NOT NULL,
+        is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT fk_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE,
+        CONSTRAINT unique_farm_name_per_user UNIQUE (name, created_by)
+      );
+
+      -- Ensure users table has farm_id column
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS farm_id UUID,
+        ADD CONSTRAINT fk_farm_id FOREIGN KEY (farm_id) REFERENCES farms(id) ON DELETE SET NULL;
       -- Create password_resets table
       CREATE TABLE IF NOT EXISTS password_resets (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -86,6 +99,7 @@ const migrations = [
         name VARCHAR(50) PRIMARY KEY,
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
         description TEXT,
+        levels TEXT[] NOT NULL DEFAULT ARRAY['A', 'B', 'C']::TEXT[],
         capacity INTEGER NOT NULL DEFAULT 18,
         occupied INTEGER DEFAULT 0 CHECK (occupied <= capacity),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
@@ -274,7 +288,7 @@ const migrations = [
         description TEXT,
         frequency_days INTEGER NOT NULL,
         age_start_days INTEGER DEFAULT 0,
-        is_active BOOLEAN DEFAULT true,
+        is_active INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -299,7 +313,7 @@ const migrations = [
         times JSONB NOT NULL,
         special_diet TEXT,
         last_fed TIMESTAMP WITH TIME ZONE,
-        is_active BOOLEAN DEFAULT true,
+        is_active INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

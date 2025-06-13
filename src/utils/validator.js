@@ -27,16 +27,22 @@ export const hutchUpdateSchema = Joi.object({
     is_occupied: Joi.boolean().optional(),
     last_cleaned: Joi.date().iso().allow(null).default(null).optional()
 }).strict().min(1);
-
 export const rowSchema = Joi.object({
+    name: Joi.string().trim().required(),
     farm_id: Joi.string().uuid().required(),
-    name: Joi.string().required(),
-    description: Joi.string().allow(null),
-    capacity: Joi.number().integer().min(1).required()
+    description: Joi.string().allow(null).optional(),
+    capacity: Joi.number().integer().min(1).required(),
+    levels: Joi.array().items(Joi.string()).min(1).required(),
 });
 
 export const rowUpdateSchema = Joi.object({
-    description: Joi.string().allow(null)
+    description: Joi.string().allow(null).required(),
+});
+
+export const rowExpandSchema = Joi.object({
+    name: Joi.string().trim().required(),
+    farm_id: Joi.string().uuid().required(),
+    additionalCapacity: Joi.number().integer().min(1).required(),
 });
 
 export const rabbitSchema = Joi.object({
@@ -202,4 +208,133 @@ export const kitUpdateSchema = Joi.object({
     })
 }).min(1).messages({
     'object.min': 'At least one field is required for update'
+});
+export const farmSchema = Joi.object({
+    name: Joi.string()
+        .min(1)
+        .max(100)
+        .required()
+        .messages({
+            'string.base': 'Farm name must be a string',
+            'string.empty': 'Farm name is required',
+            'string.min': 'Farm name must be at least 1 character long',
+            'string.max': 'Farm name must be 100 characters or less',
+            'any.required': 'Farm name is required'
+        }),
+    location: Joi.string()
+        .max(200)
+        .allow('', null)
+        .optional()
+        .messages({
+            'string.base': 'Location must be a string',
+            'string.max': 'Location must be 200 characters or less'
+        }),
+    latitude: Joi.number()
+        .min(-90)
+        .max(90)
+        .allow(null)
+        .optional()
+        .messages({
+            'number.base': 'Latitude must be a number',
+            'number.min': 'Latitude must be at least -90',
+            'number.max': 'Latitude must be at most 90'
+        }),
+    longitude: Joi.number()
+        .min(-180)
+        .max(180)
+        .allow(null)
+        .optional()
+        .messages({
+            'number.base': 'Longitude must be a number',
+            'number.min': 'Longitude must be at least -180',
+            'number.max': 'Longitude must be at most 180'
+        }),
+    size: Joi.number()
+        .positive()
+        .allow(null)
+        .optional()
+        .messages({
+            'number.base': 'Size must be a number',
+            'number.positive': 'Size must be a positive number'
+        }),
+    description: Joi.string()
+        .max(500)
+        .allow('', null)
+        .optional()
+        .messages({
+            'string.base': 'Description must be a string',
+            'string.max': 'Description must be 500 characters or less'
+        }),
+    timezone: Joi.string()
+        .max(50)
+        .default('UTC')
+        .messages({
+            'string.base': 'Timezone must be a string',
+            'string.max': 'Timezone must be 50 characters or less'
+        })
+});
+
+// Farm update schema
+export const farmUpdateSchema = Joi.object({
+    name: Joi.string()
+        .min(1)
+        .max(100)
+        .optional()
+        .messages({
+            'string.base': 'Farm name must be a string',
+            'string.empty': 'Farm name cannot be empty',
+            'string.min': 'Farm name must be at least 1 character long',
+            'string.max': 'Farm name must be 100 characters or less'
+        }),
+    location: Joi.string()
+        .max(200)
+        .allow('', null)
+        .optional()
+        .messages({
+            'string.base': 'Location must be a string',
+            'string.max': 'Location must be 200 characters or less'
+        }),
+    latitude: Joi.number()
+        .min(-90)
+        .max(90)
+        .allow(null)
+        .optional()
+        .messages({
+            'number.base': 'Latitude must be a number',
+            'number.min': 'Latitude must be at least -90',
+            'number.max': 'Latitude must be at most 90'
+        }),
+    longitude: Joi.number()
+        .min(-180)
+        .max(180)
+        .allow(null)
+        .optional()
+        .messages({
+            'number.base': 'Longitude must be a number',
+            'number.min': 'Longitude must be at least -180',
+            'number.max': 'Longitude must be at most 180'
+        }),
+    size: Joi.number()
+        .positive()
+        .allow(null)
+        .optional()
+        .messages({
+            'number.base': 'Size must be a number',
+            'number.positive': 'Size must be a positive number'
+        }),
+    description: Joi.string()
+        .max(500)
+        .allow('', null)
+        .optional()
+        .messages({
+            'string.base': 'Description must be a string',
+            'string.max': 'Description must be 500 characters or less'
+        }),
+    timezone: Joi.string()
+        .max(50)
+        .optional()
+        .messages({
+            'string.base': 'Timezone must be a string',
+            'string.max': 'Timezone must be 50 characters or less'
+        })
 });

@@ -14,6 +14,7 @@ import rabbitsRoutes from './routes/rabbits.routes.js';
 import authRouter from './routes/auth.routes.js';
 import earningsRoutes from './routes/earnings.routes.js';
 import breedRoutes from './routes/breed.routes.js';
+import farmRoutes from './routes/farms.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { runSetUp } from './database/runSetup.js';
 import bodyParser from 'body-parser';
@@ -106,6 +107,7 @@ apiRouter.use('/hutches', hutchesRoutes);
 apiRouter.use('/rabbits', rabbitsRoutes);
 apiRouter.use('/earnings', earningsRoutes);
 apiRouter.use('/breeds', breedRoutes);
+apiRouter.use('/farms', farmRoutes);
 
 app.use('/api/v1', apiRouter);
 

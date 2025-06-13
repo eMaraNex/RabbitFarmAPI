@@ -376,7 +376,7 @@ router.put('/:farmId/:id', authMiddleware, validateRequest(hutchUpdateSchema), H
  *       401:
  *         description: Unauthorized
  */
-router.post('/:farmId/:id', authMiddleware, HutchesController.deleteHutch);
+router.delete('/:farmId/:id', authMiddleware, HutchesController.deleteHutch);
 
 /**
  * @swagger

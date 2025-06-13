@@ -1,11 +1,9 @@
 import runMigrations from "./migrate.js";
-import seedDatabase from "./seed.js";
 import logger from '../middleware/logger.js';
 
 export const runSetUp = async (req, res) => {
     try {
         await runMigrations();
-        await seedDatabase();
         logger.info('Database setup completed successfully');
         return res.status(200).json({ message: 'Database migrations and seeding completed successfully' });
     } catch (error) {
