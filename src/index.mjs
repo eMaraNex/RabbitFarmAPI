@@ -93,7 +93,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // API Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-app.get('/migrate', runSetUp);
+app.post('/migrate', runSetUp);
 
 // API Routes
 const apiRouter = express.Router();
