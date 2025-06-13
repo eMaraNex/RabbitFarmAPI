@@ -28,8 +28,8 @@ const authMiddleware = async (req, res, next) => {
             `SELECT u.id, u.email, u.name, u.role_id, r.name AS role_name, r.permissions
        FROM users u
        JOIN roles r ON u.role_id = r.id
-       WHERE u.id = $1 AND u.is_deleted = 0 AND u.is_active = true
-       AND r.is_deleted = 0 AND r.is_active = true`,
+       WHERE u.id = $1 AND u.is_deleted = 0 AND u.is_active = 1
+       AND r.is_deleted = 0 AND r.is_active = 1`,
             [decoded.userId]
         );
 

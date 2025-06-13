@@ -18,7 +18,7 @@ const migrations = [
         name VARCHAR(50) NOT NULL UNIQUE,
         description TEXT,
         permissions JSONB DEFAULT '[]',
-        is_active BOOLEAN DEFAULT true,
+        is_active INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -39,7 +39,7 @@ const migrations = [
         last_login TIMESTAMP WITH TIME ZONE,
         login_count INTEGER DEFAULT 0,
         preferences JSONB DEFAULT '{}',
-        is_active BOOLEAN DEFAULT true,
+        is_active INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -60,7 +60,7 @@ const migrations = [
         timezone VARCHAR(255) DEFAULT 'UTC',
         currency VARCHAR(3) DEFAULT 'USD',
         settings JSONB DEFAULT '{}',
-        is_active BOOLEAN DEFAULT true,
+        is_active INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_by UUID NOT NULL,
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -288,7 +288,7 @@ const migrations = [
         description TEXT,
         frequency_days INTEGER NOT NULL,
         age_start_days INTEGER DEFAULT 0,
-        is_active BOOLEAN DEFAULT true,
+        is_active INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -313,7 +313,7 @@ const migrations = [
         times JSONB NOT NULL,
         special_diet TEXT,
         last_fed TIMESTAMP WITH TIME ZONE,
-        is_active BOOLEAN DEFAULT true,
+        is_active INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

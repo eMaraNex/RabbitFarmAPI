@@ -16,11 +16,11 @@ export const registerSchema = Joi.object({
     phone: Joi.string().max(20).optional().allow(null).messages({
         'string.max': 'Phone number cannot exceed 20 characters'
     }),
-    role_id: Joi.number().integer().positive().required().messages({
-        'number.base': 'Role ID must be a number',
-        'number.positive': 'Role ID must be a positive number',
-        'any.required': 'Role ID is required'
-    }),
+    // role_id: Joi.number().integer().positive().required().messages({
+    //     'number.base': 'Role ID must be a number',
+    //     'number.positive': 'Role ID must be a positive number',
+    //     'any.required': 'Role ID is required'
+    // }),
     farm_id: Joi.string().uuid().optional().allow(null).messages({
         'string.uuid': 'Farm ID must be a valid UUID'
     })
