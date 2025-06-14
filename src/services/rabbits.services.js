@@ -145,7 +145,7 @@ class RabbitsService {
             if (hutch_id) {
                 const hutchResult = await DatabaseHelper.executeQuery(
                     'SELECT 1 FROM hutches WHERE id = $1 AND farm_id = $2 AND is_deleted = 0',
-                    [hutch_id, farm_id]
+                    [hutch_id, farmId]
                 );
                 if (hutchResult.rows.length === 0) {
                     throw new ValidationError('Hutch not found');
