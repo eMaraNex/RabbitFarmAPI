@@ -217,7 +217,7 @@ const router = express.Router();
  *       404:
  *         description: Hutch not found
  */
-router.post('/', authMiddleware, validateRequest(rabbitSchema), RabbitsController.createRabbit);
+router.post('/:farmId', authMiddleware, validateRequest(rabbitSchema), RabbitsController.createRabbit);
 
 /**
  * @swagger

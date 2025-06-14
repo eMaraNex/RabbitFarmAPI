@@ -145,7 +145,7 @@ const router = express.Router();
  *       401:
  *         description: Unauthorized
  */
-router.post('/', authMiddleware, validateRequest(earningsSchema), EarningsController.createEarnings);
+router.post('/:farmId', authMiddleware, validateRequest(earningsSchema), EarningsController.createEarnings);
 
 /**
  * @swagger

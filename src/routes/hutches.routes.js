@@ -131,7 +131,7 @@ const router = express.Router();
  *       401:
  *         description: Unauthorized
  */
-router.post('/', authMiddleware, validateRequest(hutchSchema), HutchesController.createHutch);
+router.post('/:farmId', authMiddleware, validateRequest(hutchSchema), HutchesController.createHutch);
 
 /**
  * @swagger
