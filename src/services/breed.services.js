@@ -260,54 +260,107 @@ class BreedingService {
         }
     }
 
-    static async createKitRecord(kitData, userId) {
-        const {
-            breeding_record_id, kit_number, birth_weight, gender, color, status, notes
-        } = kitData;
 
-        if (!breeding_record_id || !kit_number || !birth_weight || !gender || !color) {
-            throw new ValidationError('Missing required kit record fields');
-        }
+    static async createKitRecord(req, res) {
+        const { farm_id } = req.params;
+        const { kits } = req.body;
+        const client = await pool.connect();
 
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
+            await client.query("BEGIN");
 
-            // Validate breeding record
-            const breedingResult = await DatabaseHelper.executeQuery(
-                'SELECT farm_id, actual_birth_date FROM breeding_records WHERE id = $1 AND is_deleted = 0',
-                [breeding_record_id]
+            // Validate farm exists
+            const farmResult = await client.query(
+                "SELECT id FROM farms WHERE id = $1 AND is_deleted = 0",
+                [farm_id]
             );
-            if (breedingResult.rows.length === 0) {
-                throw new ValidationError('Breeding record not found');
-            }
-            const breedingRecord = breedingResult.rows[0];
-            if (!breedingRecord.actual_birth_date) {
-                throw new ValidationError('Cannot add kits until actual birth date is set');
+            if (farmResult.rows.length === 0) {
+                throw new Error("Farm not found");
             }
 
-            // Calculate weaning date (6 weeks after birth)
-            const weaningDate = new Date(new Date(breedingRecord.actual_birth_date).getTime() + 42 * 24 * 60 * 60 * 1000);
+            // Validate parent IDs
+            const parentIds = [...new Set(kits.map((kit) => [kit.parent_male_id, kit.parent_female_id]).flat())].filter(Boolean);
+            if (parentIds.length > 0) {
+                const parentResult = await client.query(
+                    "SELECT rabbit_id FROM rabbits WHERE farm_id = $1 AND rabbit_id = ANY($2) AND is_deleted = 0",
+                    [farm_id, parentIds]
+                );
+                const foundIds = parentResult.rows.map((row) => row.rabbit_id);
+                const missingIds = parentIds.filter((id) => !foundIds.includes(id));
+                if (missingIds.length > 0) {
+                    throw new Error(`Invalid parent IDs: ${missingIds.join(", ")}`);
+                }
+            }
 
-            // Insert kit record
-            const kitResult = await DatabaseHelper.executeQuery(
-                `INSERT INTO kit_records (id, breeding_record_id, kit_number, birth_weight, gender, color, status, weaning_date, notes, created_at, is_deleted)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, 0) RETURNING *`,
-                [uuidv4(), breeding_record_id, kit_number, birth_weight, gender, color, status || 'alive', weaningDate, notes || null]
+            // Validate unique kit_numbers
+            const kitNumbers = kits.map((kit) => kit.kit_number);
+            const existingKits = await client.query(
+                "SELECT kit_number FROM kit_records WHERE farm_id = $1 AND kit_number = ANY($2) AND is_deleted = 0",
+                [farm_id, kitNumbers]
             );
-            const kitRecord = kitResult.rows[0];
+            const duplicates = existingKits.rows.map((row) => row.kit_number);
+            if (duplicates.length > 0) {
+                throw new Error(`Duplicate kit numbers: ${duplicates.join(", ")}`);
+            }
 
-            await DatabaseHelper.executeQuery('COMMIT');
-            logger.info(`Kit record ${kit_number} created for breeding record ${breeding_record_id} by user ${userId}`);
-            return kitRecord;
+            // Insert kits
+            const insertedKits = [];
+            for (const kit of kits) {
+                const {
+                    kit_number,
+                    birth_weight,
+                    gender,
+                    color,
+                    status,
+                    parent_male_id,
+                    parent_female_id,
+                    notes,
+                } = kit;
+
+                const result = await client.query(
+                    `INSERT INTO kit_records (
+          id, farm_id, kit_number, birth_weight, gender, color, status,
+          parent_male_id, parent_female_id, notes, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        RETURNING id, kit_number`,
+                    [
+                        uuidv4(),
+                        farm_id,
+                        kit_number,
+                        birth_weight,
+                        gender,
+                        color,
+                        status,
+                        parent_male_id,
+                        parent_female_id,
+                        notes,
+                        new Date(),
+                        new Date(),
+                    ]
+                );
+                insertedKits.push(result.rows[0]);
+            }
+
+            await client.query("COMMIT");
+            res.json({
+                success: true,
+                message: `${insertedKits.length} kits created successfully`,
+                data: insertedKits,
+            });
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
-            logger.error(`Error creating kit record: ${error.message}`);
-            throw error;
+            await client.query("ROLLBACK");
+            console.error("Error creating bulk kits:", error);
+            res.status(400).json({
+                success: false,
+                message: error.message || "Failed to create kits",
+            });
+        } finally {
+            client.release();
         }
-    }
+    };
 
     static async updateKitRecord(kitId, updateData, userId) {
-        const { weaning_weight, status, notes } = updateData;
+        const { weaning_weight, status, notes, parent_male_id, parent_female_id } = updateData;
 
         try {
             await DatabaseHelper.executeQuery('BEGIN');
@@ -321,10 +374,45 @@ class BreedingService {
             }
             const kitRecord = kitResult.rows[0];
 
+            // Validate parent IDs if provided
+            if (parent_male_id) {
+                const maleResult = await DatabaseHelper.executeQuery(
+                    'SELECT rabbit_id FROM rabbits WHERE rabbit_id = $1 AND is_deleted = 0',
+                    [parent_male_id]
+                );
+                if (maleResult.rows.length === 0) {
+                    throw new ValidationError('Parent male rabbit not found');
+                }
+            }
+            if (parent_female_id) {
+                const femaleResult = await DatabaseHelper.executeQuery(
+                    'SELECT rabbit_id FROM rabbits WHERE rabbit_id = $1 AND is_deleted = 0',
+                    [parent_female_id]
+                );
+                if (femaleResult.rows.length === 0) {
+                    throw new ValidationError('Parent female rabbit not found');
+                }
+            }
+
             const updatedKitResult = await DatabaseHelper.executeQuery(
-                `UPDATE kit_records SET weaning_weight = $1, status = $2, notes = $3, updated_at = CURRENT_TIMESTAMP
-                 WHERE id = $4 AND is_deleted = 0 RETURNING *`,
-                [weaning_weight || kitRecord.weaning_weight, status || kitRecord.status, notes || kitRecord.notes, kitId]
+                `UPDATE kit_records
+             SET
+                 weaning_weight = $1,
+                 status = $2,
+                 notes = $3,
+                 parent_male_id = $4,
+                 parent_female_id = $5,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $6 AND is_deleted = 0
+             RETURNING *`,
+                [
+                    weaning_weight || kitRecord.weaning_weight,
+                    status || kitRecord.status,
+                    notes || kitRecord.notes,
+                    parent_male_id || kitRecord.parent_male_id,
+                    parent_female_id || kitRecord.parent_female_id,
+                    kitId
+                ]
             );
             const updatedKit = updatedKitResult.rows[0];
 

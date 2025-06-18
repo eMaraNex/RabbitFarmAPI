@@ -163,7 +163,7 @@ class RabbitsService {
 
             // Get current rabbit
             const currentRabbit = await DatabaseHelper.executeQuery(
-                'SELECT id, hutch_id FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND is_deleted = 0',
+                'SELECT * FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND is_deleted = 0',
                 [rabbitId, farmId]
             );
             if (currentRabbit.rows.length === 0) {

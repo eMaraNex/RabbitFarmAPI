@@ -217,6 +217,8 @@ const migrations = [
         status VARCHAR(20) DEFAULT 'alive',
         weaning_date DATE,
         weaning_weight DECIMAL(5,2),
+        parent_male_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        parent_female_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         notes TEXT,
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
