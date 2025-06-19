@@ -18,7 +18,7 @@ const migrations = [
         name VARCHAR(50) NOT NULL UNIQUE,
         description TEXT,
         permissions JSONB DEFAULT '[]',
-        is_active INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
+        is_active INTEGER DEFAULT 0 CHECK (is_active IN (0, 1)),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -39,7 +39,7 @@ const migrations = [
         last_login TIMESTAMP WITH TIME ZONE,
         login_count INTEGER DEFAULT 0,
         preferences JSONB DEFAULT '{}',
-        is_active INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
+        is_active INTEGER DEFAULT 0 CHECK (is_active IN (0, 1)),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -60,7 +60,7 @@ const migrations = [
         timezone VARCHAR(255) DEFAULT 'UTC',
         currency VARCHAR(3) DEFAULT 'USD',
         settings JSONB DEFAULT '{}',
-        is_active INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
+        is_active INTEGER DEFAULT 0 CHECK (is_active IN (0, 1)),
         created_by UUID NOT NULL,
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -137,14 +137,15 @@ const migrations = [
         birth_date DATE NOT NULL,
         weight DECIMAL(5,2) NOT NULL,
         hutch_id VARCHAR(50) REFERENCES hutches(id),
-        parent_male_id UUID REFERENCES rabbits(id),
-        parent_female_id UUID REFERENCES rabbits(id),
+        parent_male_id VARCHAR(200) REFERENCES rabbits(id),
+        parent_female_id VARCHAR(200) REFERENCES rabbits(id),
         acquisition_type VARCHAR(20) DEFAULT 'birth',
         acquisition_date DATE,
         acquisition_cost DECIMAL(10,2),
         is_pregnant BOOLEAN DEFAULT false,
         pregnancy_start_date DATE,
         expected_birth_date DATE,
+        actual_birth_date DATE,
         total_litters INTEGER DEFAULT 0,
         total_kits INTEGER DEFAULT 0,
         status VARCHAR(20) DEFAULT 'active',
@@ -210,7 +211,8 @@ const migrations = [
       CREATE TABLE IF NOT EXISTS kit_records (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         breeding_record_id UUID REFERENCES breeding_records(id) ON DELETE CASCADE,
-        kit_number INTEGER NOT NULL,
+        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
+        kit_number VARCHAR(50) NOT NULL,
         birth_weight DECIMAL(5,2),
         gender VARCHAR(6) CHECK (gender IN ('male', 'female')),
         color VARCHAR(50),
@@ -290,7 +292,7 @@ const migrations = [
         description TEXT,
         frequency_days INTEGER NOT NULL,
         age_start_days INTEGER DEFAULT 0,
-        is_active INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
+        is_active INTEGER DEFAULT 0 CHECK (is_active IN (0, 1)),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -315,7 +317,7 @@ const migrations = [
         times JSONB NOT NULL,
         special_diet TEXT,
         last_fed TIMESTAMP WITH TIME ZONE,
-        is_active INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
+        is_active INTEGER DEFAULT 0 CHECK (is_active IN (0, 1)),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -536,6 +538,8 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_breeding_records_farm_id ON breeding_records(farm_id) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_breeding_records_doe_id ON breeding_records(doe_id) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_breeding_records_buck_id ON breeding_records(buck_id) WHERE is_deleted = 0;
+      CREATE INDEX IF NOT EXISTS idx_kit_records_breeding_record_id ON kit_records(breeding_record_id) WHERE is_deleted = 0;
+      CREATE INDEX IF NOT EXISTS idx_kit_records_farm_id ON kit_records(farm_id) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_health_records_rabbit_id ON health_records(rabbit_id) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_health_records_date ON health_records(date) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_feeding_records_rabbit_id ON feeding_records(rabbit_id) WHERE is_deleted = 0;
@@ -585,6 +589,7 @@ const migrations = [
       CREATE TRIGGER update_rabbits_updated_at BEFORE UPDATE ON rabbits FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
       CREATE TRIGGER update_hutch_rabbit_history_updated_at BEFORE UPDATE ON hutch_rabbit_history FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
       CREATE TRIGGER update_breeding_records_updated_at BEFORE UPDATE ON breeding_records FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+      CREATE TRIGGER update_kit_records_updated_at BEFORE UPDATE ON kit_records FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
       CREATE TRIGGER update_health_records_updated_at BEFORE UPDATE ON health_records FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
       CREATE TRIGGER update_feeding_schedules_updated_at BEFORE UPDATE ON feeding_schedules FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
       CREATE TRIGGER update_earnings_records_updated_at BEFORE UPDATE ON earnings_records FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -606,6 +611,7 @@ const migrations = [
       DROP TRIGGER IF EXISTS update_rabbits_updated_at ON rabbits;
       DROP TRIGGER IF EXISTS update_hutch_rabbit_history_updated_at ON hutch_rabbit_history;
       DROP TRIGGER IF EXISTS update_breeding_records_updated_at ON breeding_records;
+      DROP TRIGGER IF EXISTS update_kit_records_updated_at ON kit_records;
       DROP TRIGGER IF EXISTS update_health_records_updated_at ON health_records;
       DROP TRIGGER IF EXISTS update_feeding_schedules_updated_at ON feeding_schedules;
       DROP TRIGGER IF EXISTS update_earnings_records_updated_at ON earnings_records;
@@ -632,6 +638,8 @@ const migrations = [
       DROP INDEX IF EXISTS idx_breeding_records_farm_id;
       DROP INDEX IF EXISTS idx_breeding_records_doe_id;
       DROP INDEX IF EXISTS idx_breeding_records_buck_id;
+      DROP INDEX IF EXISTS idx_kit_records_breeding_record_id;
+      DROP INDEX IF EXISTS idx_kit_records_farm_id;
       DROP INDEX IF EXISTS idx_health_records_rabbit_id;
       DROP INDEX IF EXISTS idx_health_records_date;
       DROP INDEX IF EXISTS idx_feeding_records_rabbit_id;
@@ -645,6 +653,84 @@ const migrations = [
       DROP INDEX IF EXISTS idx_notifications_is_read;
       DROP INDEX IF EXISTS idx_activity_logs_user_id;
       DROP INDEX IF EXISTS idx_activity_logs_farm_id;
+    `
+  },
+  {
+    version: 8,
+    name: 'create_rabbit_birth_history_table',
+    up: `
+      -- Create rabbit_birth_history table
+      CREATE TABLE IF NOT EXISTS rabbit_birth_history (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
+        doe_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        breeding_record_id UUID REFERENCES breeding_records(id) ON DELETE SET NULL,
+        birth_date DATE NOT NULL,
+        number_of_kits INTEGER NOT NULL CHECK (number_of_kits >= 0),
+        notes TEXT,
+        is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- Create index for rabbit_birth_history
+      CREATE INDEX IF NOT EXISTS idx_rabbit_birth_history_farm_id ON rabbit_birth_history(farm_id) WHERE is_deleted = 0;
+      CREATE INDEX IF NOT EXISTS idx_rabbit_birth_history_doe_id ON rabbit_birth_history(doe_id) WHERE is_deleted = 0;
+      CREATE INDEX IF NOT EXISTS idx_rabbit_birth_history_breeding_record_id ON rabbit_birth_history(breeding_record_id) WHERE is_deleted = 0;
+
+      -- Create trigger for updated_at
+      CREATE TRIGGER update_rabbit_birth_history_updated_at
+      BEFORE UPDATE ON rabbit_birth_history
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+
+      -- Create function to update rabbits.total_litters and total_kits
+      CREATE OR REPLACE FUNCTION update_rabbit_birth_stats()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        UPDATE rabbits
+        SET total_litters = (
+          SELECT COUNT(*)
+          FROM rabbit_birth_history
+          WHERE doe_id = NEW.doe_id
+          AND farm_id = NEW.farm_id
+          AND is_deleted = 0
+        ),
+        total_kits = (
+          SELECT COALESCE(SUM(number_of_kits), 0)
+          FROM rabbit_birth_history
+          WHERE doe_id = NEW.doe_id
+          AND farm_id = NEW.farm_id
+          AND is_deleted = 0
+        ),
+        updated_at = CURRENT_TIMESTAMP
+        WHERE rabbit_id = NEW.doe_id
+        AND farm_id = NEW.farm_id
+        AND is_deleted = 0;
+        RETURN NEW;
+      END;
+      $$ language 'plpgsql';
+
+      -- Create trigger for rabbit_birth_history to update rabbit stats
+      CREATE TRIGGER update_rabbit_birth_stats
+      AFTER INSERT OR UPDATE OF number_of_kits, is_deleted
+      ON rabbit_birth_history
+      FOR EACH ROW
+      EXECUTE FUNCTION update_rabbit_birth_stats();
+    `,
+    down: `
+      -- Drop trigger and function
+      DROP TRIGGER IF EXISTS update_rabbit_birth_stats ON rabbit_birth_history;
+      DROP FUNCTION IF EXISTS update_rabbit_birth_stats;
+      DROP TRIGGER IF EXISTS update_rabbit_birth_history_updated_at ON rabbit_birth_history;
+
+      -- Drop indexes
+      DROP INDEX IF EXISTS idx_rabbit_birth_history_farm_id;
+      DROP INDEX IF EXISTS idx_rabbit_birth_history_doe_id;
+      DROP INDEX IF EXISTS idx_rabbit_birth_history_breeding_record_id;
+
+      -- Drop table
+      DROP TABLE IF EXISTS rabbit_birth_history CASCADE;
     `
   }
 ];
