@@ -59,7 +59,9 @@ export const rabbitSchema = Joi.object({
     pregnancy_start_date: Joi.date().allow(null),
     expected_birth_date: Joi.date().allow(null),
     status: Joi.string(),
-    notes: Joi.string().allow(null)
+    notes: Joi.string().allow(null),
+    parent_male_id: Joi.string().allow(null),
+    parent_female_id: Joi.string().allow(null),
 });
 
 export const rabbitUpdateSchema = Joi.object({
