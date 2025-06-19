@@ -418,4 +418,7 @@ router.put('/:farmId/:rabbitId', authMiddleware, validateRequest(rabbitUpdateSch
  */
 router.post('/rabbit_removals/:farmId/:rabbitId', authMiddleware, validateRequest(rabbitDeleteSchema), RabbitsController.deleteRabbit);
 
+
+router.all('/:farmId/details', authMiddleware, RabbitsController.getAllRabbitDetails);
+
 export default router;

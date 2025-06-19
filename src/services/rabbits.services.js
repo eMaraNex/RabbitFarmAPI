@@ -397,6 +397,60 @@ class RabbitsService {
             throw error;
         }
     }
+
+    static async getAllRabbitDetails(farmId) {
+        try {
+            const result = await DatabaseHelper.executeQuery(
+                `
+                SELECT r.*, h.id AS hutch_id, h.row_name,
+                    (SELECT JSON_AGG(
+                        JSON_BUILD_OBJECT(
+                            'hutch_id', hr.hutch_id,
+                            'assigned_at', hr.assigned_at,
+                            'removed_at', hr.removed_at,
+                            'removal_reason', hr.removal_reason,
+                            'removal_notes', hr.removal_notes
+                        )
+                    )
+                    FROM hutch_rabbit_history hr
+                    WHERE hr.rabbit_id = r.rabbit_id AND hr.is_deleted = 0) AS hutch_history,
+                    (SELECT JSON_AGG(
+                        JSON_BUILD_OBJECT(
+                            'birth_date', rbh.birth_date,
+                            'number_of_kits', rbh.number_of_kits,
+                            'breeding_record_id', rbh.breeding_record_id,
+                            'notes', rbh.notes,
+                            'kits', (
+                                SELECT JSON_AGG(
+                                    JSON_BUILD_OBJECT(
+                                        'id', kr.id,
+                                        'kit_number', kr.kit_number,
+                                        'birth_weight', kr.birth_weight,
+                                        'gender', kr.gender,
+                                        'color', kr.color,
+                                        'status', kr.status
+                                    )
+                                )
+                                FROM kit_records kr
+                                WHERE kr.breeding_record_id = rbh.breeding_record_id AND kr.is_deleted = 0
+                            )
+                        )
+                    )
+                    FROM rabbit_birth_history rbh
+                    WHERE rbh.doe_id = r.rabbit_id AND rbh.farm_id = r.farm_id AND rbh.is_deleted = 0) AS birth_history
+                FROM rabbits r
+                LEFT JOIN hutches h ON r.hutch_id = h.id AND r.farm_id = h.farm_id
+                WHERE r.farm_id = $1 AND r.is_deleted = 0
+                ORDER BY r.created_at DESC
+                `,
+                [farmId]
+            );
+            return result.rows;
+        } catch (error) {
+            logger.error(`Error fetching all rabbit details for farm ${farmId}: ${error.message}`);
+            throw error;
+        }
+    }
 }
 
 export default RabbitsService;

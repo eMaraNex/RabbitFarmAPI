@@ -63,6 +63,17 @@ class RabbitsController {
             next(error);
         }
     }
+
+    static async getAllRabbitDetails(req, res, next) {
+        try {
+            const { farmId } = req.params;
+            const rabbits = await RabbitsService.getAllRabbitDetails(farmId);
+            return SuccessResponse(res, 200, 'Rabbits retrieved successfully', rabbits);
+        } catch (error) {
+            logger.error(`Get all rabbits error: ${error.message}`);
+            next(error);
+        }
+    }
 }
 
 export default RabbitsController;
