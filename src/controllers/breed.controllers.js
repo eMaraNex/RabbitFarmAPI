@@ -64,9 +64,10 @@ class BreedingController {
 
     static async createKitRecord(req, res, next) {
         try {
-            const kitData = { ...req.body, breeding_record_id: req.params.breedingRecordId };
+            const { farmId } = req.params;
+            const kitData = { ...req.body };
             const userId = req.user.id;
-            const kitRecord = await BreedingService.createKitRecord(kitData, userId);
+            const kitRecord = await BreedingService.createKitRecord(kitData, farmId, userId);
             return SuccessResponse(res, 201, 'Kit record created successfully', kitRecord);
         } catch (error) {
             logger.error(`Create kit record error: ${error.message}`);

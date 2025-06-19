@@ -7,6 +7,7 @@ class RabbitsService {
     static async createRabbit(rabbitData, userId) {
         const {
             farm_id, rabbit_id, name, gender, breed, color, birth_date, weight, hutch_id,
+            parent_male_id, parent_female_id, acquisition_type, acquisition_date, acquisition_cost,
             is_pregnant, pregnancy_start_date, expected_birth_date, status, notes
         } = rabbitData;
         if (!farm_id || !rabbit_id || !gender || !breed || !color || !birth_date || !weight) {
@@ -46,17 +47,39 @@ class RabbitsService {
                 is_occupied = true;
             }
 
+            // // Validate parent IDs if provided
+            // if (parent_male_id) {
+            //     const maleResult = await DatabaseHelper.executeQuery(
+            //         'SELECT 1 FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND gender = $3 AND is_deleted = 0',
+            //         [parent_male_id, farm_id, 'male']
+            //     );
+            //     if (maleResult.rows.length === 0) {
+            //         throw new ValidationError('Parent male rabbit not found or invalid');
+            //     }
+            // }
+            // if (parent_female_id) {
+            //     const femaleResult = await DatabaseHelper.executeQuery(
+            //         'SELECT 1 FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND gender = $3 AND is_deleted = 0',
+            //         [parent_female_id, farm_id, 'female']
+            //     );
+            //     if (femaleResult.rows.length === 0) {
+            //         throw new ValidationError('Parent female rabbit not found or invalid');
+            //     }
+            // }
+
             // Insert rabbit
             const rabbitResult = await DatabaseHelper.executeQuery(
-                `INSERT INTO rabbits (id, farm_id, rabbit_id, name, gender, breed, color, birth_date, weight, hutch_id,
-             is_pregnant, pregnancy_start_date, expected_birth_date, status, notes, created_at, is_deleted)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP, $16)
-             RETURNING *`,
+                `INSERT INTO rabbits (
+                    id, farm_id, rabbit_id, name, gender, breed, color, birth_date, weight, hutch_id,
+                    parent_male_id, parent_female_id, acquisition_type, acquisition_date, acquisition_cost,
+                    is_pregnant, pregnancy_start_date, expected_birth_date, status, notes, created_at, is_deleted
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, CURRENT_TIMESTAMP, 0)
+                RETURNING *`,
                 [
-                    uuidv4(), farm_id,
-                    rabbit_id, name || null, gender, breed, color, birth_date, weight,
-                    hutch_id || null, is_pregnant || false, pregnancy_start_date || null, expected_birth_date || null,
-                    status || 'active', notes || null, 0
+                    uuidv4(), farm_id, rabbit_id, name || null, gender, breed, color, birth_date, weight,
+                    hutch_id || null, parent_male_id || null, parent_female_id || null, acquisition_type || 'birth',
+                    acquisition_date || null, acquisition_cost || null, is_pregnant || false,
+                    pregnancy_start_date || null, expected_birth_date || null, status || 'active', notes || null
                 ]
             );
             const rabbit = rabbitResult.rows[0];
@@ -71,7 +94,7 @@ class RabbitsService {
                 // Insert into hutch_rabbit_history
                 await DatabaseHelper.executeQuery(
                     `INSERT INTO hutch_rabbit_history (id, hutch_id, rabbit_id, farm_id, assigned_at, created_at, is_deleted)
-                 VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)`,
+                    VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)`,
                     [uuidv4(), hutch_id, rabbit.rabbit_id, farm_id]
                 );
             }
@@ -90,22 +113,46 @@ class RabbitsService {
         try {
             const result = await DatabaseHelper.executeQuery(
                 `
-        SELECT r.*, h.id AS hutch_id, h.row_name,
-               (SELECT JSON_AGG(
-                   JSON_BUILD_OBJECT(
-                       'hutch_id', hr.hutch_id,
-                       'assigned_at', hr.assigned_at,
-                       'removed_at', hr.removed_at,
-                       'removal_reason', hr.removal_reason,
-                       'removal_notes', hr.removal_notes
-                   )
-               )
-               FROM hutch_rabbit_history hr
-               WHERE hr.rabbit_id = r.id AND hr.is_deleted = 0) AS history
-        FROM rabbits r
-        LEFT JOIN hutches h ON r.hutch_id = h.id AND r.farm_id = h.farm_id
-        WHERE r.rabbit_id = $1 AND r.farm_id = $2 AND r.is_deleted = 0
-        `,
+                SELECT r.*, h.id AS hutch_id, h.row_name,
+                    (SELECT JSON_AGG(
+                        JSON_BUILD_OBJECT(
+                            'hutch_id', hr.hutch_id,
+                            'assigned_at', hr.assigned_at,
+                            'removed_at', hr.removed_at,
+                            'removal_reason', hr.removal_reason,
+                            'removal_notes', hr.removal_notes
+                        )
+                    )
+                    FROM hutch_rabbit_history hr
+                    WHERE hr.rabbit_id = r.rabbit_id AND hr.is_deleted = 0) AS hutch_history,
+                    (SELECT JSON_AGG(
+                        JSON_BUILD_OBJECT(
+                            'birth_date', rbh.birth_date,
+                            'number_of_kits', rbh.number_of_kits,
+                            'breeding_record_id', rbh.breeding_record_id,
+                            'notes', rbh.notes,
+                            'kits', (
+                                SELECT JSON_AGG(
+                                    JSON_BUILD_OBJECT(
+                                        'id', kr.id,
+                                        'kit_number', kr.kit_number,
+                                        'birth_weight', kr.birth_weight,
+                                        'gender', kr.gender,
+                                        'color', kr.color,
+                                        'status', kr.status
+                                    )
+                                )
+                                FROM kit_records kr
+                                WHERE kr.breeding_record_id = rbh.breeding_record_id AND kr.is_deleted = 0
+                            )
+                        )
+                    )
+                    FROM rabbit_birth_history rbh
+                    WHERE rbh.doe_id = r.rabbit_id AND rbh.farm_id = r.farm_id AND rbh.is_deleted = 0) AS birth_history
+                FROM rabbits r
+                LEFT JOIN hutches h ON r.hutch_id = h.id AND r.farm_id = h.farm_id
+                WHERE r.rabbit_id = $1 AND r.farm_id = $2 AND r.is_deleted = 0
+                `,
                 [rabbitId, farmId]
             );
             if (result.rows.length === 0) {
@@ -134,9 +181,11 @@ class RabbitsService {
 
     static async updateRabbit(rabbitId, farmId, rabbitData, userId) {
         const {
-            name, gender, breed, color, birth_date, weight, hutch_id, is_pregnant,
-            pregnancy_start_date, expected_birth_date, status, notes
+            name, gender, breed, color, birth_date, weight, hutch_id,
+            parent_male_id, parent_female_id, acquisition_type, acquisition_date, acquisition_cost,
+            is_pregnant, pregnancy_start_date, expected_birth_date, status, notes
         } = rabbitData;
+
         try {
             await DatabaseHelper.executeQuery('BEGIN');
 
@@ -145,7 +194,7 @@ class RabbitsService {
             if (hutch_id) {
                 const hutchResult = await DatabaseHelper.executeQuery(
                     'SELECT 1 FROM hutches WHERE id = $1 AND farm_id = $2 AND is_deleted = 0',
-                    [hutch_id, farm_id]
+                    [hutch_id, farmId]
                 );
                 if (hutchResult.rows.length === 0) {
                     throw new ValidationError('Hutch not found');
@@ -161,9 +210,29 @@ class RabbitsService {
                 is_occupied = true;
             }
 
+            // // Validate parent IDs if provided
+            // if (parent_male_id) {
+            //     const maleResult = await DatabaseHelper.executeQuery(
+            //         'SELECT 1 FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND gender = $3 AND is_deleted = 0',
+            //         [parent_male_id, farmId, 'male']
+            //     );
+            //     if (maleResult.rows.length === 0) {
+            //         throw new ValidationError('Parent male rabbit not found or invalid');
+            //     }
+            // }
+            // if (parent_female_id) {
+            //     const femaleResult = await DatabaseHelper.executeQuery(
+            //         'SELECT 1 FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND gender = $3 AND is_deleted = 0',
+            //         [parent_female_id, farmId, 'female']
+            //     );
+            //     if (femaleResult.rows.length === 0) {
+            //         throw new ValidationError('Parent female rabbit not found or invalid');
+            //     }
+            // }
+
             // Get current rabbit
             const currentRabbit = await DatabaseHelper.executeQuery(
-                'SELECT id, hutch_id FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND is_deleted = 0',
+                'SELECT * FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND is_deleted = 0',
                 [rabbitId, farmId]
             );
             if (currentRabbit.rows.length === 0) {
@@ -173,14 +242,21 @@ class RabbitsService {
 
             // Update rabbit
             const result = await DatabaseHelper.executeQuery(
-                `UPDATE rabbits SET name = $1, gender = $2, breed = $3, color = $4, birth_date = $5, weight = $6,
-         hutch_id = $7, is_pregnant = $8, pregnancy_start_date = $9, expected_birth_date = $10, status = $11,
-         notes = $12, updated_at = CURRENT_TIMESTAMP
-         WHERE rabbit_id = $13 AND farm_id = $14 AND is_deleted = 0 RETURNING *`,
+                `UPDATE rabbits
+                SET name = $1, gender = $2, breed = $3, color = $4, birth_date = $5, weight = $6, hutch_id = $7,
+                    parent_male_id = $8, parent_female_id = $9, acquisition_type = $10, acquisition_date = $11,
+                    acquisition_cost = $12, is_pregnant = $13, pregnancy_start_date = $14, expected_birth_date = $15,
+                    status = $16, notes = $17, updated_at = CURRENT_TIMESTAMP
+                WHERE rabbit_id = $18 AND farm_id = $19 AND is_deleted = 0
+                RETURNING *`,
                 [
-                    name || null, gender, breed, color, birth_date, weight, hutch_id || null,
-                    is_pregnant || false, pregnancy_start_date || null, expected_birth_date || null,
-                    status || 'active', notes || null, rabbitId, farmId
+                    name || rabbit.name, gender || rabbit.gender, breed || rabbit.breed, color || rabbit.color,
+                    birth_date || rabbit.birth_date, weight || rabbit.weight, hutch_id || null,
+                    parent_male_id || rabbit.parent_male_id, parent_female_id || rabbit.parent_female_id,
+                    acquisition_type || rabbit.acquisition_type, acquisition_date || rabbit.acquisition_date,
+                    acquisition_cost || rabbit.acquisition_cost, is_pregnant || rabbit.is_pregnant,
+                    pregnancy_start_date || rabbit.pregnancy_start_date, expected_birth_date || rabbit.expected_birth_date,
+                    status || rabbit.status, notes || rabbit.notes, rabbitId, farmId
                 ]
             );
             if (result.rows.length === 0) {
@@ -193,24 +269,11 @@ class RabbitsService {
                 if (rabbit.hutch_id) {
                     // Mark as removed from old hutch
                     await DatabaseHelper.executeQuery(
-                        `UPDATE hutch_rabbit_history SET removed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-                         WHERE hutch_id = $1 AND rabbit_id = $2 AND farm_id = $3 AND is_deleted = 0 AND removed_at IS NULL`,
-                        [rabbit.hutch_id, rabbit.id, farmId]
+                        `UPDATE hutch_rabbit_history
+                        SET removed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                        WHERE hutch_id = $1 AND rabbit_id = $2 AND farm_id = $3 AND is_deleted = 0 AND removed_at IS NULL`,
+                        [rabbit.hutch_id, rabbit.rabbit_id, farmId]
                     );
-                }
-                if (hutch_id) {
-                    // Insert new history entry
-                    await DatabaseHelper.executeQuery(
-                        `INSERT INTO hutch_rabbit_history (id, hutch_id, rabbit_id, farm_id, assigned_at, created_at, is_deleted)
-                         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)`,
-                        [uuidv4(), hutch_id, rabbit.id, farmId]
-                    );
-                    await DatabaseHelper.executeQuery(
-                        'UPDATE hutches SET is_occupied = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND farm_id = $2',
-                        [hutch_id, farmId]
-                    );
-                }
-                if (rabbit.hutch_id) {
                     // Update old hutch is_occupied if no rabbits remain
                     const rabbitCount = await DatabaseHelper.executeQuery(
                         'SELECT COUNT(*) FROM rabbits WHERE hutch_id = $1 AND farm_id = $2 AND is_deleted = 0',
@@ -222,6 +285,18 @@ class RabbitsService {
                             [rabbit.hutch_id, farmId]
                         );
                     }
+                }
+                if (hutch_id) {
+                    // Insert new history entry
+                    await DatabaseHelper.executeQuery(
+                        `INSERT INTO hutch_rabbit_history (id, hutch_id, rabbit_id, farm_id, assigned_at, created_at, is_deleted)
+                        VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)`,
+                        [uuidv4(), hutch_id, rabbit.rabbit_id, farmId]
+                    );
+                    await DatabaseHelper.executeQuery(
+                        'UPDATE hutches SET is_occupied = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND farm_id = $2',
+                        [hutch_id, farmId]
+                    );
                 }
             }
 
@@ -253,7 +328,7 @@ class RabbitsService {
             }
             const rabbit = rabbitResult.rows[0];
 
-            // Soft delete rabbit using rabbit_id
+            // Soft delete rabbit
             const result = await DatabaseHelper.executeQuery(
                 'UPDATE rabbits SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE rabbit_id = $1 AND farm_id = $2 AND is_deleted = 0 RETURNING *',
                 [rabbitId, farmId]
@@ -262,45 +337,27 @@ class RabbitsService {
 
             // Insert removal record
             await DatabaseHelper.executeQuery(
-                `INSERT INTO removal_records (id, rabbit_id, hutch_id, farm_id, reason, notes, date, sale_amount, sale_weight, sold_to, created_at, is_deleted)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, 0)`,
+                `INSERT INTO removal_records (
+                    id, rabbit_id, hutch_id, farm_id, reason, notes, date, sale_amount, sale_weight, sold_to, created_at, is_deleted
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, 0)`,
                 [
-                    uuidv4(),
-                    rabbit.rabbit_id,
-                    hutch_id || rabbit.hutch_id || null,
-                    farmId,
-                    reason,
-                    notes || null,
-                    date,
-                    sale_amount || null,
-                    sale_weight || null,
-                    sold_to || null,
+                    uuidv4(), rabbit.rabbit_id, hutch_id || rabbit.hutch_id || null, farmId, reason,
+                    notes || null, date || new Date().toISOString().split('T')[0], sale_amount || null,
+                    sale_weight || null, sold_to || null
                 ]
             );
 
             // Update hutch_rabbit_history
             if (rabbit.hutch_id) {
                 await DatabaseHelper.executeQuery(
-                    `UPDATE hutch_rabbit_history SET 
-                        removed_at = CURRENT_TIMESTAMP, 
-                        removal_reason = $1, 
-                        removal_notes = $2,
-                        sale_amount = $3, 
-                        sale_date = $4, 
-                        sale_weight = $5, 
-                        sold_to = $6, 
-                        updated_at = CURRENT_TIMESTAMP
+                    `UPDATE hutch_rabbit_history
+                    SET removed_at = CURRENT_TIMESTAMP, removal_reason = $1, removal_notes = $2,
+                        sale_amount = $3, sale_date = $4, sale_weight = $5, sold_to = $6, updated_at = CURRENT_TIMESTAMP
                     WHERE hutch_id = $7 AND rabbit_id = $8 AND farm_id = $9 AND is_deleted = 0 AND removed_at IS NULL`,
                     [
-                        reason,
-                        sale_notes || notes || null,
-                        sale_amount || null,
-                        date,
-                        sale_weight || null,
-                        sold_to || null,
-                        rabbit.hutch_id,
-                        rabbit.rabbit_id,
-                        farmId,
+                        reason, sale_notes || notes || null, sale_amount || null,
+                        date || new Date().toISOString().split('T')[0], sale_weight || null, sold_to || null,
+                        rabbit.hutch_id, rabbit.rabbit_id, farmId
                     ]
                 );
 
@@ -320,19 +377,13 @@ class RabbitsService {
             // Insert earnings record if sold
             if (reason === 'Sale' && sale_amount) {
                 await DatabaseHelper.executeQuery(
-                    `INSERT INTO earnings_records (id, farm_id, rabbit_id, type, amount, currency, date, weight, sale_type, buyer_name, notes, created_at, is_deleted)
-           VALUES ($1, $2, $3, 'rabbit_sale', $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, 0)`,
+                    `INSERT INTO earnings_records (
+                        id, farm_id, rabbit_id, type, amount, currency, date, weight, sale_type, buyer_name, notes, created_at, is_deleted
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP, 0)`,
                     [
-                        uuidv4(),
-                        farmId,
-                        rabbit.rabbit_id,
-                        sale_amount,
-                        currency || 'USD',
-                        date,
-                        sale_weight || null,
-                        sale_type || 'whole',
-                        sold_to || null,
-                        sale_notes || null,
+                        uuidv4(), farmId, rabbit.rabbit_id, 'rabbit_sale', sale_amount, currency || 'USD',
+                        date || new Date().toISOString().split('T')[0], sale_weight || null, sale_type || 'whole',
+                        sold_to || null, sale_notes || null
                     ]
                 );
             }
@@ -343,6 +394,60 @@ class RabbitsService {
         } catch (error) {
             await DatabaseHelper.executeQuery('ROLLBACK');
             logger.error(`Error deleting rabbit ${rabbitId}: ${error.message}`);
+            throw error;
+        }
+    }
+
+    static async getAllRabbitDetails(farmId) {
+        try {
+            const result = await DatabaseHelper.executeQuery(
+                `
+                SELECT r.*, h.id AS hutch_id, h.row_name,
+                    (SELECT JSON_AGG(
+                        JSON_BUILD_OBJECT(
+                            'hutch_id', hr.hutch_id,
+                            'assigned_at', hr.assigned_at,
+                            'removed_at', hr.removed_at,
+                            'removal_reason', hr.removal_reason,
+                            'removal_notes', hr.removal_notes
+                        )
+                    )
+                    FROM hutch_rabbit_history hr
+                    WHERE hr.rabbit_id = r.rabbit_id AND hr.is_deleted = 0) AS hutch_history,
+                    (SELECT JSON_AGG(
+                        JSON_BUILD_OBJECT(
+                            'birth_date', rbh.birth_date,
+                            'number_of_kits', rbh.number_of_kits,
+                            'breeding_record_id', rbh.breeding_record_id,
+                            'notes', rbh.notes,
+                            'kits', (
+                                SELECT JSON_AGG(
+                                    JSON_BUILD_OBJECT(
+                                        'id', kr.id,
+                                        'kit_number', kr.kit_number,
+                                        'birth_weight', kr.birth_weight,
+                                        'gender', kr.gender,
+                                        'color', kr.color,
+                                        'status', kr.status
+                                    )
+                                )
+                                FROM kit_records kr
+                                WHERE kr.breeding_record_id = rbh.breeding_record_id AND kr.is_deleted = 0
+                            )
+                        )
+                    )
+                    FROM rabbit_birth_history rbh
+                    WHERE rbh.doe_id = r.rabbit_id AND rbh.farm_id = r.farm_id AND rbh.is_deleted = 0) AS birth_history
+                FROM rabbits r
+                LEFT JOIN hutches h ON r.hutch_id = h.id AND r.farm_id = h.farm_id
+                WHERE r.farm_id = $1 AND r.is_deleted = 0
+                ORDER BY r.created_at DESC
+                `,
+                [farmId]
+            );
+            return result.rows;
+        } catch (error) {
+            logger.error(`Error fetching all rabbit details for farm ${farmId}: ${error.message}`);
             throw error;
         }
     }

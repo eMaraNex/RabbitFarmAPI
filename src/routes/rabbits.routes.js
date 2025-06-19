@@ -217,7 +217,7 @@ const router = express.Router();
  *       404:
  *         description: Hutch not found
  */
-router.post('/', authMiddleware, validateRequest(rabbitSchema), RabbitsController.createRabbit);
+router.post('/:farmId', authMiddleware, validateRequest(rabbitSchema), RabbitsController.createRabbit);
 
 /**
  * @swagger
@@ -417,5 +417,8 @@ router.put('/:farmId/:rabbitId', authMiddleware, validateRequest(rabbitUpdateSch
  *         description: Unauthorized
  */
 router.post('/rabbit_removals/:farmId/:rabbitId', authMiddleware, validateRequest(rabbitDeleteSchema), RabbitsController.deleteRabbit);
+
+
+router.all('/:farmId/details', authMiddleware, RabbitsController.getAllRabbitDetails);
 
 export default router;

@@ -195,7 +195,7 @@ const router = express.Router();
  *       401:
  *         description: Unauthorized
  */
-router.post('/', authMiddleware, validateRequest(breedingSchema), BreedingController.createBreedingRecord);
+router.post('/:farmId', authMiddleware, validateRequest(breedingSchema), BreedingController.createBreedingRecord);
 
 /**
  * @swagger
@@ -433,7 +433,8 @@ router.delete('/:farmId/:recordId', authMiddleware, BreedingController.deleteBre
  *       401:
  *         description: Unauthorized
  */
-router.post('/kits/:breedingRecordId', authMiddleware, validateRequest(kitSchema), BreedingController.createKitRecord);
+router.post('/kits/:farmId', authMiddleware, BreedingController.createKitRecord);
+// router.post('/kits/:farmId', authMiddleware, validateRequest(kitSchema), BreedingController.createKitRecord);
 
 /**
  * @swagger
