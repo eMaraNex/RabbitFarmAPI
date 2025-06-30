@@ -157,7 +157,7 @@ async sendAlertNotification(alert) {
      */
     async processDueAlerts() {
         try {
-            const dueAlerts = await this.getDueAlerts();
+            const dueAlerts = await this.getDueAlerts(farmId);
             const results = [];
 
             for (const alert of dueAlerts) {
@@ -180,7 +180,9 @@ async sendAlertNotification(alert) {
      */
     async getFarmAlerts(farmId, filters = {}) {
         const { alert_type, severity, status, limit = 10 } = filters;
-        let query = `SELECT * FROM alerts WHERE farm_id = $1 AND is_active = true AND is_deleted = false`;
+        let query = `SELECT * FROM alerts al
+                LEFT OUTER JOIN rabbits rb ON rb.farm_id = al.farm_id
+                WHERE al.farm_id = $1 AND rb.is_pregnant = true`;
         const params = [farmId];
         let paramCount = 2;
 
