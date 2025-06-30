@@ -732,6 +732,56 @@ const migrations = [
       -- Drop table
       DROP TABLE IF EXISTS rabbit_birth_history CASCADE;
     `
+  },
+  {
+    version: 9,
+    name: 'create_alerts_table',
+    up: `
+      -- Create alerts table
+      CREATE TABLE IF NOT EXISTS alerts (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        name VARCHAR(255) NOT NULL,
+        alert_start_date TIMESTAMP WITH TIME ZONE NOT NULL,
+        alert_end_date TIMESTAMP WITH TIME ZONE,
+        alert_type VARCHAR(50) NOT NULL,
+        severity VARCHAR(20) NOT NULL CHECK (severity IN ('low', 'medium', 'high')),
+        message TEXT NOT NULL,
+        status VARCHAR(20) NOT NULL CHECK (status IN ('pending', 'sent', 'completed', 'rejected')),
+        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
+        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE SET NULL,
+        hutch_id VARCHAR(50) REFERENCES hutches(id) ON DELETE SET NULL,
+        created_on TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_on TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        is_active BOOLEAN DEFAULT true,
+        is_deleted BOOLEAN DEFAULT false
+      );
+
+      -- Create indexes for alerts
+      CREATE INDEX IF NOT EXISTS idx_alerts_farm_id ON alerts(farm_id) WHERE is_deleted = false;
+      CREATE INDEX IF NOT EXISTS idx_alerts_alert_start_date ON alerts(alert_start_date) WHERE is_deleted = false;
+      CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status) WHERE is_deleted = false;
+      CREATE INDEX IF NOT EXISTS idx_alerts_is_active ON alerts(is_active) WHERE is_deleted = false;
+
+      -- Create trigger for updated_at
+      CREATE TRIGGER update_alerts_updated_at
+      BEFORE UPDATE ON alerts
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+    `,
+    down: `
+      -- Drop trigger
+      DROP TRIGGER IF EXISTS update_alerts_updated_at ON alerts;
+
+      -- Drop indexes
+      DROP INDEX IF EXISTS idx_alerts_farm_id;
+      DROP INDEX IF EXISTS idx_alerts_alert_start_date;
+      DROP INDEX IF EXISTS idx_alerts_status;
+      DROP INDEX IF EXISTS idx_alerts_is_active;
+
+      -- Drop table
+      DROP TABLE IF EXISTS alerts CASCADE;
+    `
   }
 ];
 
