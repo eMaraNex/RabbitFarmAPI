@@ -763,15 +763,15 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status) WHERE is_deleted = false;
       CREATE INDEX IF NOT EXISTS idx_alerts_is_active ON alerts(is_active) WHERE is_deleted = false;
 
-      -- Create trigger for updated_at
-      CREATE TRIGGER update_alerts_updated_at
+      -- Create trigger for updated_on
+      CREATE TRIGGER update_alerts_updated_on
       BEFORE UPDATE ON alerts
       FOR EACH ROW
-      EXECUTE FUNCTION update_updated_at_column();
+      EXECUTE FUNCTION update_updated_on_column();
     `,
     down: `
       -- Drop trigger
-      DROP TRIGGER IF EXISTS update_alerts_updated_at ON alerts;
+      DROP TRIGGER IF EXISTS update_alerts_updated_on ON alerts;
 
       -- Drop indexes
       DROP INDEX IF EXISTS idx_alerts_farm_id;
