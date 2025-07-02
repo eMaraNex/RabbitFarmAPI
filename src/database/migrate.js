@@ -641,19 +641,19 @@ const migrations = [
       DROP INDEX IF EXISTS idx_breeding_records_buck_id;
       DROP INDEX IF EXISTS idx_kit_records_breeding_record_id;
       DROP INDEX IF EXISTS idx_kit_records_farm_id;
-      DROP INDEX IF NOT EXISTS idx_health_records_rabbit_id;
-      DROP INDEX IF NOT EXISTS idx_health_records_date;
-      DROP INDEX IF NOT EXISTS idx_feeding_records_rabbit_id;
-      DROP INDEX IF NOT EXISTS idx_feeding_records_hutch_id;
-      DROP INDEX IF NOT EXISTS idx_feeding_records_date;
-      DROP INDEX IF NOT EXISTS idx_earnings_records_farm_id;
-      DROP INDEX IF NOT EXISTS idx_earnings_records_date;
-      DROP INDEX IF NOT EXISTS idx_production_records_farm_id;
-      DROP INDEX IF NOT EXISTS idx_production_records_date;
-      DROP INDEX IF NOT EXISTS idx_notifications_user_id;
-      DROP INDEX IF NOT EXISTS idx_notifications_is_read;
-      DROP INDEX IF NOT EXISTS idx_activity_logs_user_id;
-      DROP INDEX IF NOT EXISTS idx_activity_logs_farm_id;
+      DROP INDEX IF EXISTS idx_health_records_rabbit_id;
+      DROP INDEX IF EXISTS idx_health_records_date;
+      DROP INDEX IF EXISTS idx_feeding_records_rabbit_id;
+      DROP INDEX IF EXISTS idx_feeding_records_hutch_id;
+      DROP INDEX IF EXISTS idx_feeding_records_date;
+      DROP INDEX IF EXISTS idx_earnings_records_farm_id;
+      DROP INDEX IF EXISTS idx_earnings_records_date;
+      DROP INDEX IF EXISTS idx_production_records_farm_id;
+      DROP INDEX IF EXISTS idx_production_records_date;
+      DROP INDEX IF EXISTS idx_notifications_user_id;
+      DROP INDEX IF EXISTS idx_notifications_is_read;
+      DROP INDEX IF EXISTS idx_activity_logs_user_id;
+      DROP INDEX IF EXISTS idx_activity_logs_farm_id;
     `
   },
   {
@@ -738,6 +738,15 @@ const migrations = [
     version: 9,
     name: 'create_alerts_table',
     up: `
+      -- Create function to update updated_on timestamp
+      CREATE OR REPLACE FUNCTION update_updated_on_column()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        NEW.updated_on = CURRENT_TIMESTAMP;
+        RETURN NEW;
+      END;
+      $$ language 'plpgsql';
+
       -- Create alerts table
       CREATE TABLE IF NOT EXISTS alerts (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -752,6 +761,7 @@ const migrations = [
         user_id UUID REFERENCES users(id) ON DELETE SET NULL,
         rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE SET NULL,
         hutch_id VARCHAR(50) REFERENCES hutches(id) ON DELETE SET NULL,
+        notify_on DATE[] NOT NULL DEFAULT '{}',
         created_on TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_on TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         is_active BOOLEAN DEFAULT true,
@@ -763,6 +773,7 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_alerts_alert_start_date ON alerts(alert_start_date) WHERE is_deleted = false;
       CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status) WHERE is_deleted = false;
       CREATE INDEX IF NOT EXISTS idx_alerts_is_active ON alerts(is_active) WHERE is_deleted = false;
+      CREATE INDEX IF NOT EXISTS idx_alerts_notify_on ON alerts USING GIN (notify_on) WHERE is_deleted = false;
 
       -- Create trigger for updated_on
       CREATE TRIGGER update_alerts_updated_on
@@ -779,9 +790,13 @@ const migrations = [
       DROP INDEX IF EXISTS idx_alerts_alert_start_date;
       DROP INDEX IF EXISTS idx_alerts_status;
       DROP INDEX IF EXISTS idx_alerts_is_active;
+      DROP INDEX IF EXISTS idx_alerts_notify_on;
 
       -- Drop table
       DROP TABLE IF EXISTS alerts CASCADE;
+
+      -- Drop function
+      DROP FUNCTION IF EXISTS update_updated_on_column;
     `
   }
 ];

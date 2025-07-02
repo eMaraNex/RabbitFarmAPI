@@ -77,40 +77,56 @@ class BreedingService {
                 [mating_date, expected_birth_date, doe_id, farm_id]
             );
 
-            // Create alerts for breeding events
+            // Get hutch_id for alerts
             const hutchResult = await DatabaseHelper.executeQuery(
                 'SELECT hutch_id FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND is_deleted = 0',
                 [doe_id, farm_id]
             );
             const hutch_id = hutchResult.rows[0]?.hutch_id;
 
-            // Create alert for nesting box (26 days after mating)
-            const nestingBoxDate = new Date(new Date(mating_date).getTime() + 26 * 24 * 60 * 60 * 1000);
+            // Create immediate breeding success alert
             await AlertService.createAlert({
                 farm_id,
                 user_id: userId,
                 rabbit_id: doe_id,
                 hutch_id,
-                name: `Add Nesting Box for ${doe_id}`,
-                alert_start_date: nestingBoxDate,
+                name: `Breeding Success for ${doe_id} and ${buck_id}`,
+                alert_start_date: new Date(),
                 alert_type: 'breeding',
-                severity: 'high',
-                message: `Add nesting box for rabbit ${doe_id} on hutch ${hutch_id || 'unknown'} by ${nestingBoxDate.toLocaleDateString()}`
+                severity: 'info',
+                message: `Breeding recorded for doe ${doe_id} and buck ${buck_id} on ${new Date(mating_date).toLocaleDateString()}. Expected birth date: ${new Date(expected_birth_date).toLocaleDateString()}`
             });
 
-            // Create daily birth check alerts (days 28-31)
-            for (let i = 28; i <= 31; i++) {
-                const birthCheckDate = new Date(new Date(mating_date).getTime() + i * 24 * 60 * 60 * 1000);
+            // Create scheduled alerts (only trigger day before or on the date)
+            const alerts = [
+                {
+                    name: `Add Nesting Box for ${doe_id}`,
+                    alert_start_date: new Date(new Date(mating_date).getTime() + 26 * 24 * 60 * 60 * 1000),
+                    alert_type: 'breeding',
+                    severity: 'high',
+                    message: `Add nesting box for rabbit ${doe_id} on hutch ${hutch_id || 'unknown'} by ${new Date(new Date(mating_date).getTime() + 26 * 24 * 60 * 60 * 1000).toLocaleDateString()}`
+                },
+                // Birth check alerts (days 28-31)
+                ...Array.from({ length: 4 }, (_, i) => ({
+                    name: `Check Birth for ${doe_id}`,
+                    alert_start_date: new Date(new Date(mating_date).getTime() + (28 + i) * 24 * 60 * 60 * 1000),
+                    alert_type: 'birth',
+                    severity: 'high',
+                    message: `Check for birth of rabbit ${doe_id} on hutch ${hutch_id || 'unknown'} on ${new Date(new Date(mating_date).getTime() + (28 + i) * 24 * 60 * 60 * 1000).toLocaleDateString()}`
+                }))
+            ];
+
+            for (const alert of alerts) {
                 await AlertService.createAlert({
                     farm_id,
                     user_id: userId,
                     rabbit_id: doe_id,
                     hutch_id,
-                    name: `Check Birth for ${doe_id}`,
-                    alert_start_date: birthCheckDate,
-                    alert_type: 'birth',
-                    severity: 'high',
-                    message: `Check for birth of rabbit ${doe_id} on hutch ${hutch_id || 'unknown'} on ${birthCheckDate.toLocaleDateString()}`
+                    ...alert,
+                    notify_on: [
+                        new Date(new Date(alert.alert_start_date).getTime() - 24 * 60 * 60 * 1000), // Day before
+                        alert.alert_start_date // On the day
+                    ]
                 });
             }
 
@@ -255,54 +271,51 @@ class BreedingService {
                     [breedingRecord.doe_id]
                 );
 
-                // Create new alerts for post-birth tasks
+                // Get hutch_id for alerts
                 const hutchResult = await DatabaseHelper.executeQuery(
                     'SELECT hutch_id FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND is_deleted = 0',
                     [breedingRecord.doe_id, farmId]
                 );
                 const hutch_id = hutchResult.rows[0]?.hutch_id;
 
-                // Fostering alert (day 4)
-                const fosteringDate = new Date(new Date(actual_birth_date).getTime() + 4 * 24 * 60 * 60 * 1000);
-                await AlertService.createAlert({
-                    farm_id: farmId,
-                    user_id: userId,
-                    rabbit_id: breedingRecord.doe_id,
-                    hutch_id,
-                    name: `Fostering Check for ${breedingRecord.doe_id}`,
-                    alert_start_date: fosteringDate,
-                    alert_type: 'birth',
-                    severity: 'medium',
-                    message: `Check fostering needs for rabbit ${breedingRecord.doe_id} on hutch ${hutch_id || 'unknown'} by ${fosteringDate.toLocaleDateString()}`
-                });
+                // Create scheduled post-birth alerts (only trigger day before or on the date)
+                const alerts = [
+                    {
+                        name: `Fostering Check for ${breedingRecord.doe_id}`,
+                        alert_start_date: new Date(new Date(actual_birth_date).getTime() + 4 * 24 * 60 * 60 * 1000),
+                        alert_type: 'birth',
+                        severity: 'medium',
+                        message: `Check fostering needs for rabbit ${breedingRecord.doe_id} on hutch ${hutch_id || 'unknown'} by ${new Date(new Date(actual_birth_date).getTime() + 4 * 24 * 60 * 60 * 1000).toLocaleDateString()}`
+                    },
+                    {
+                        name: `Remove Nesting Box for ${breedingRecord.doe_id}`,
+                        alert_start_date: new Date(new Date(actual_birth_date).getTime() + 20 * 24 * 60 * 60 * 1000),
+                        alert_type: 'birth',
+                        severity: 'medium',
+                        message: `Remove nesting box for rabbit ${breedingRecord.doe_id} on hutch ${hutch_id || 'unknown'} by ${new Date(new Date(actual_birth_date).getTime() + 20 * 24 * 60 * 60 * 1000).toLocaleDateString()}`
+                    },
+                    {
+                        name: `Wean Kits for ${breedingRecord.doe_id}`,
+                        alert_start_date: new Date(new Date(actual_birth_date).getTime() + 42 * 24 * 60 * 60 * 1000),
+                        alert_type: 'birth',
+                        severity: 'high',
+                        message: `Wean kits for rabbit ${breedingRecord.doe_id} on hutch ${hutch_id || 'unknown'} by ${new Date(new Date(actual_birth_date).getTime() + 42 * 24 * 60 * 60 * 1000).toLocaleDateString()}`
+                    }
+                ];
 
-                // Remove nesting box alert (day 20)
-                const removeNestingBoxDate = new Date(new Date(actual_birth_date).getTime() + 20 * 24 * 60 * 60 * 1000);
-                await AlertService.createAlert({
-                    farm_id: farmId,
-                    user_id: userId,
-                    rabbit_id: breedingRecord.doe_id,
-                    hutch_id,
-                    name: `Remove Nesting Box for ${breedingRecord.doe_id}`,
-                    alert_start_date: removeNestingBoxDate,
-                    alert_type: 'birth',
-                    severity: 'medium',
-                    message: `Remove nesting box for rabbit ${breedingRecord.doe_id} on hutch ${hutch_id || 'unknown'} by ${removeNestingBoxDate.toLocaleDateString()}`
-                });
-
-                // Weaning alert (day 42)
-                const weaningDate = new Date(new Date(actual_birth_date).getTime() + 42 * 24 * 60 * 60 * 1000);
-                await AlertService.createAlert({
-                    farm_id: farmId,
-                    user_id: userId,
-                    rabbit_id: breedingRecord.doe_id,
-                    hutch_id,
-                    name: `Wean Kits for ${breedingRecord.doe_id}`,
-                    alert_start_date: weaningDate,
-                    alert_type: 'birth',
-                    severity: 'high',
-                    message: `Wean kits for rabbit ${breedingRecord.doe_id} on hutch ${hutch_id || 'unknown'} by ${weaningDate.toLocaleDateString()}`
-                });
+                for (const alert of alerts) {
+                    await AlertService.createAlert({
+                        farm_id: farmId,
+                        user_id: userId,
+                        rabbit_id: breedingRecord.doe_id,
+                        hutch_id,
+                        ...alert,
+                        notify_on: [
+                            new Date(new Date(alert.alert_start_date).getTime() - 24 * 60 * 60 * 1000), // Day before
+                            alert.alert_start_date // On the day
+                        ]
+                    });
+                }
             }
 
             // Update breeding record
@@ -565,7 +578,11 @@ class BreedingService {
                 alert_start_date: weaningDate,
                 alert_type: 'birth',
                 severity: 'medium',
-                message: `Relocate kits for rabbit ${kitz[0].parent_female_id} to individual hutches by ${weaningDate.toLocaleDateString()}`
+                message: `Relocate kits for rabbit ${kitz[0].parent_female_id} to individual hutches by ${weaningDate.toLocaleDateString()}`,
+                notify_on: [
+                    new Date(new Date(weaningDate).getTime() - 24 * 60 * 60 * 1000), // Day before
+                    weaningDate // On the day
+                ]
             });
 
             await client.query('COMMIT');

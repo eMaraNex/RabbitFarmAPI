@@ -31,12 +31,19 @@ class AlertService {
             alert_type,
             severity,
             message,
-            status = 'pending'
+            status = 'pending',
+            notify_on
         } = alertData;
 
         if (!farm_id || !name || !alert_start_date || !alert_type || !severity || !message) {
             throw new ValidationError('Missing required alert fields');
         }
+
+        // Default notify_on to day before and on alert_start_date if not provided
+        const defaultNotifyOn = notify_on || [
+            new Date(new Date(alert_start_date).getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            new Date(alert_start_date).toISOString().split('T')[0]
+        ];
 
         try {
             await DatabaseHelper.executeQuery('BEGIN');
@@ -44,8 +51,8 @@ class AlertService {
             const result = await DatabaseHelper.executeQuery(
                 `INSERT INTO alerts (
                     id, name, alert_start_date, alert_end_date, alert_type, severity, message, status,
-                    farm_id, user_id, rabbit_id, hutch_id, created_on, updated_on, is_active, is_deleted
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, true, false)
+                    farm_id, user_id, rabbit_id, hutch_id, notify_on, created_on, updated_on, is_active, is_deleted
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, true, false)
                 RETURNING *`,
                 [
                     uuidv4(),
@@ -59,7 +66,8 @@ class AlertService {
                     farm_id,
                     user_id || null,
                     rabbit_id || null,
-                    hutch_id || null
+                    hutch_id || null,
+                    defaultNotifyOn
                 ]
             );
 
@@ -67,10 +75,11 @@ class AlertService {
             await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Alert ${alert.id} created for farm ${farm_id}`);
 
-            // Send immediate notification if start date is now or in the past
-            // if (new Date(alert_start_date) <= new Date()) {
+            // Send notification if current date is in notify_on
+            const currentDate = new Date().toISOString().split('T')[0];
+            if (alert.notify_on.includes(currentDate)) {
                 await this.sendAlertNotification(alert);
-            // }
+            }
 
             return alert;
         } catch (error) {
@@ -86,12 +95,14 @@ class AlertService {
      */
     async getDueAlerts() {
         try {
+            const currentDate = new Date().toISOString().split('T')[0];
             const result = await DatabaseHelper.executeQuery(
                 `SELECT * FROM alerts
-                 WHERE alert_start_date <= CURRENT_TIMESTAMP
+                 WHERE notify_on @> ARRAY[$1]::date[]
                  AND status = 'pending'
                  AND is_active = true
-                 AND is_deleted = false`
+                 AND is_deleted = false`,
+                [currentDate]
             );
             return result.rows;
         } catch (error) {
@@ -105,52 +116,60 @@ class AlertService {
      * @param {Object} alert - Alert object
      * @returns {Promise<Object>} - Notification result
      */
-async sendAlertNotification(alert) {
-    try {
-        await DatabaseHelper.executeQuery('BEGIN');
-        console.log('Current directory:', process.cwd());
-        console.log('__dirname:', __dirname);
+    async sendAlertNotification(alert) {
+        try {
+            await DatabaseHelper.executeQuery('BEGIN');
+            console.log('Current directory:', process.cwd());
+            console.log('__dirname:', __dirname);
 
-        // Get user email
-        const userResult = await DatabaseHelper.executeQuery(
-            'SELECT email FROM users WHERE id = $1 AND is_deleted = 0',
-            [alert.user_id]
-        );
-        const userEmail = userResult.rows[0]?.email;
-       const templatePath = path.join(__dirname, '../templates/alert_notification.html');
-        console.log('Resolved templatePath:', templatePath);
-        if (userEmail) {
-            const emailResult = await this.emailService.sendEmail({
-                ...alert,
-                from: process.env.DEFAULT_SENDER_EMAIL,
-                to: userEmail,
-                subject: `Rabbit Farming Alert: ${alert.name}`,
-                text: alert.message,
-                templatePath: templatePath,
-                appName: 'Rabbit Farm Management',
-            });
+            // Get user email
+            const userResult = await DatabaseHelper.executeQuery(
+                'SELECT email FROM users WHERE id = $1 AND is_deleted = 0',
+                [alert.user_id]
+            );
+            const userEmail = userResult.rows[0]?.email;
+            const templatePath = path.join(__dirname, '../templates/alert_notification.html');
+            console.log('Resolved templatePath:', templatePath);
 
-            if (!emailResult.success) {
-                throw new Error(`Failed to send email: ${emailResult.message}`);
+            if (userEmail) {
+                const currentDate = new Date().toISOString().split('T')[0];
+                if (!alert.notify_on.includes(currentDate)) {
+                    logger.info(`Alert ${alert.id} not sent: current date ${currentDate} not in notify_on`);
+                    await DatabaseHelper.executeQuery('COMMIT');
+                    return { success: false, message: 'Notification not sent: current date not in notify_on' };
+                }
+
+                const emailResult = await this.emailService.sendEmail({
+                    ...alert,
+                    from: process.env.DEFAULT_SENDER_EMAIL,
+                    to: userEmail,
+                    subject: `Rabbit Farming Alert: ${alert.name}`,
+                    text: alert.message,
+                    templatePath: templatePath,
+                    appName: 'Rabbit Farm Management',
+                });
+
+                if (!emailResult.success) {
+                    throw new Error(`Failed to send email: ${emailResult.message}`);
+                }
             }
+
+            // Update alert status
+            await DatabaseHelper.executeQuery(
+                `UPDATE alerts SET status = 'sent', updated_on = CURRENT_TIMESTAMP
+                 WHERE id = $1`,
+                [alert.id]
+            );
+
+            await DatabaseHelper.executeQuery('COMMIT');
+            logger.info(`Notification sent for alert ${alert.id}`);
+            return { success: true, message: 'Notification sent successfully' };
+        } catch (error) {
+            await DatabaseHelper.executeQuery('ROLLBACK');
+            logger.error(`Error sending alert notification ${alert.id}: ${error.message}`);
+            throw error;
         }
-
-        // Update alert status
-        await DatabaseHelper.executeQuery(
-            `UPDATE alerts SET status = 'sent', updated_on = CURRENT_TIMESTAMP
-             WHERE id = $1`,
-            [alert.id]
-        );
-
-        await DatabaseHelper.executeQuery('COMMIT');
-        logger.info(`Notification sent for alert ${alert.id}`);
-        return { success: true, message: 'Notification sent successfully' };
-    } catch (error) {
-        await DatabaseHelper.executeQuery('ROLLBACK');
-        logger.error(`Error sending alert notification ${alert.id}: ${error.message}`);
-        throw error;
     }
-}
 
     /**
      * Process due alerts (called by scheduler)
@@ -215,16 +234,23 @@ async sendAlertNotification(alert) {
      * Update alert status
      * @param {string} alertId - Alert UUID
      * @param {string} status - New status
+     * @param {Array} [notify_on] - Optional new notify_on dates
      * @returns {Promise<Object>} - Updated alert
      */
-    async updateAlertStatus(alertId, status) {
+    async updateAlertStatus(alertId, status, notify_on = null) {
         try {
-            const result = await DatabaseHelper.executeQuery(
-                `UPDATE alerts SET status = $1, updated_on = CURRENT_TIMESTAMP
-                 WHERE id = $2 AND is_deleted = false
-                 RETURNING *`,
-                [status, alertId]
-            );
+            let query = `UPDATE alerts SET status = $1, updated_on = CURRENT_TIMESTAMP`;
+            const params = [status, alertId];
+            let paramCount = 3;
+
+            if (notify_on) {
+                query += `, notify_on = $${paramCount++}`;
+                params.push(notify_on);
+            }
+
+            query += ` WHERE id = $2 AND is_deleted = false RETURNING *`;
+
+            const result = await DatabaseHelper.executeQuery(query, params);
 
             if (result.rows.length === 0) {
                 throw new ValidationError('Alert not found');

@@ -4,7 +4,7 @@ import { ValidationError } from '../middleware/errors.js';
 
 class HutchesService {
     static async createHutch(hutchData, userId) {
-        const { farm_id, id, row_name, level, position, size, material, features, last_cleaned, is_occupied = false, is_deleted = 0 } = hutchData;
+        const { farm_id, id, row_id, level, position, size, material, features, last_cleaned, is_occupied = false, is_deleted = 0 } = hutchData;
         if (!farm_id || !id || !level || !position || !size || !material) {
             throw new ValidationError('Missing required hutch fields');
         }
@@ -18,10 +18,10 @@ class HutchesService {
         try {
             await DatabaseHelper.executeQuery('BEGIN');
 
-            if (row_name) {
+            if (row_id) {
                 const rowResult = await DatabaseHelper.executeQuery(
-                    'SELECT levels FROM rows WHERE name = $1 AND farm_id = $2 AND is_deleted = 0',
-                    [row_name, farm_id]
+                    'SELECT levels FROM rows WHERE id = $1 AND farm_id = $2 AND is_deleted = 0',
+                    [row_id, farm_id]
                 );
                 if (rowResult.rows.length === 0) {
                     throw new ValidationError('Row not found');
@@ -41,24 +41,24 @@ class HutchesService {
             }
 
             const rowHutches = await DatabaseHelper.executeQuery(
-                'SELECT COUNT(*) FROM hutches WHERE row_name = $1 AND farm_id = $2 AND is_deleted = 0',
-                [row_name, farm_id]
+                'SELECT COUNT(*) FROM hutches WHERE row_id = $1 AND farm_id = $2 AND is_deleted = 0',
+                [row_id, farm_id]
             );
             const rowResult = await DatabaseHelper.executeQuery(
-                'SELECT capacity FROM rows WHERE name = $1 AND farm_id = $2 AND is_deleted = 0',
-                [row_name, farm_id]
+                'SELECT capacity FROM rows WHERE id = $1 AND farm_id = $2 AND is_deleted = 0',
+                [row_id, farm_id]
             );
             if (rowResult.rows.length > 0 && parseInt(rowHutches.rows[0].count) >= rowResult.rows[0].capacity) {
                 throw new ValidationError('Row capacity reached. Please expand row capacity.');
             }
 
             const result = await DatabaseHelper.executeQuery(
-                `INSERT INTO hutches (id, farm_id, row_name, level, position, size, material, features, is_occupied, last_cleaned, created_at, updated_at, is_deleted)
+                `INSERT INTO hutches (id, farm_id, row_id, level, position, size, material, features, is_occupied, last_cleaned, created_at, updated_at, is_deleted)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $11) RETURNING *`,
                 [
                     id,
                     farm_id,
-                    row_name || null,
+                    row_id || null,
                     level,
                     position,
                     size,
@@ -94,7 +94,7 @@ class HutchesService {
                 FROM rabbits r2
                 WHERE r2.hutch_id = h.id AND r2.farm_id = $2 AND r2.is_deleted = 0) AS rabbits
          FROM hutches h
-         LEFT JOIN rows r ON h.row_name = r.name
+         LEFT JOIN rows r ON h.row_id = r.id
          WHERE h.id = $1 AND h.farm_id = $2 AND h.is_deleted = 0`,
                 [id, farmId]
             );
@@ -108,15 +108,15 @@ class HutchesService {
         }
     }
 
-    static async getAllHutches(farmId, { rowName, limit, offset, is_occupied }) {
+    static async getAllHutches(farmId, { rowId, limit, offset, is_occupied }) {
         try {
-            let query = 'SELECT h.*, r.name AS row_name FROM hutches h LEFT JOIN rows r ON h.row_name = r.name WHERE h.farm_id = $1 AND h.is_deleted = 0';
+            let query = 'SELECT h.*, r.name AS row_name FROM hutches h LEFT JOIN rows r ON h.row_id = r.id WHERE h.farm_id = $1 AND h.is_deleted = 0';
             const params = [farmId];
             let paramIndex = 2;
 
-            if (rowName) {
-                query += ` AND h.row_name = $${paramIndex++}`;
-                params.push(rowName);
+            if (rowId) {
+                query += ` AND h.row_id = $${paramIndex++}`;
+                params.push(rowId);
             }
 
             if (is_occupied !== undefined) {
@@ -145,14 +145,14 @@ class HutchesService {
     }
 
     static async updateHutch(id, farmId, hutchData, userId) {
-        const { row_name, level, position, size, material, features, is_occupied, last_cleaned } = hutchData;
+        const { row_id, level, position, size, material, features, is_occupied, last_cleaned } = hutchData;
         try {
             await DatabaseHelper.executeQuery('BEGIN');
 
-            if (row_name) {
+            if (row_id) {
                 const rowResult = await DatabaseHelper.executeQuery(
-                    'SELECT levels FROM rows WHERE name = $1 AND farm_id = $2 AND is_deleted = 0',
-                    [row_name, farmId]
+                    'SELECT levels FROM rows WHERE id = $1 AND farm_id = $2 AND is_deleted = 0',
+                    [row_id, farmId]
                 );
                 if (rowResult.rows.length === 0) {
                     throw new ValidationError('Row not found');
@@ -163,12 +163,12 @@ class HutchesService {
             }
 
             const result = await DatabaseHelper.executeQuery(
-                `UPDATE hutches SET row_name = $1, level = COALESCE($2, level), position = COALESCE($3, position), 
+                `UPDATE hutches SET row_id = $1, level = COALESCE($2, level), position = COALESCE($3, position), 
          size = COALESCE($4, size), material = COALESCE($5, material), features = COALESCE($6, features), 
          is_occupied = COALESCE($7, is_occupied), last_cleaned = $8, updated_at = CURRENT_TIMESTAMP
          WHERE id = $9 AND farm_id = $10 AND is_deleted = 0 RETURNING *`,
                 [
-                    row_name || null,
+                    row_id || null,
                     level,
                     position,
                     size,

@@ -29,7 +29,7 @@ class RowsService {
 
             // Check if row exists
             const existingRow = await DatabaseHelper.executeQuery(
-                'SELECT 1 FROM rows WHERE name = $1 AND farm_id = $2 AND is_deleted = 0',
+                'SELECT id FROM rows WHERE name = $1 AND farm_id = $2 AND is_deleted = 0',
                 [name, farm_id]
             );
             if (existingRow.rows.length > 0) {
@@ -38,7 +38,7 @@ class RowsService {
 
             // Insert row
             const rowResult = await DatabaseHelper.executeQuery(
-                'INSERT INTO rows (name, farm_id, description, capacity, levels, occupied, created_at, is_deleted) VALUES ($1, $2, $3, $4, $5, 0, CURRENT_TIMESTAMP, 0) RETURNING *',
+                'INSERT INTO rows (id, name, farm_id, description, capacity, levels, occupied, created_at, is_deleted) VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, 0, CURRENT_TIMESTAMP, 0) RETURNING *',
                 [name, farm_id, description || null, capacity, levels]
             );
             const row = rowResult.rows[0];
@@ -51,7 +51,7 @@ class RowsService {
                     const hutchId = `${name}-${level}${position}`;
                     hutches.push([
                         hutchId,
-                        name,
+                        row.id,
                         farm_id,
                         level,
                         position,
@@ -67,13 +67,13 @@ class RowsService {
             // Insert hutches
             for (const hutch of hutches) {
                 await DatabaseHelper.executeQuery(
-                    'INSERT INTO hutches (id, row_name, farm_id, level, position, size, material, features, is_occupied, created_at, is_deleted) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10)',
+                    'INSERT INTO hutches (id, row_id, farm_id, level, position, size, material, features, is_occupied, created_at, is_deleted) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10)',
                     hutch
                 );
             }
 
             await DatabaseHelper.executeQuery('COMMIT');
-            logger.info(`Row ${name} created with ${hutches.length} hutches (${JSON.stringify(distribution)}) by user ${userId}`);
+            logger.info(`Row ${row.id} (${name}) created with ${hutches.length} hutches (${JSON.stringify(distribution)}) by user ${userId}`);
             return row;
         } catch (error) {
             await DatabaseHelper.executeQuery('ROLLBACK');
@@ -82,7 +82,7 @@ class RowsService {
         }
     }
 
-    static async expandRowCapacity(name, farmId, additionalCapacity, userId) {
+    static async expandRowCapacity(rowId, farmId, additionalCapacity, userId) { 
         if (!additionalCapacity || additionalCapacity < 1) {
             throw new ValidationError('Additional capacity must be at least 1')
         }
@@ -92,8 +92,8 @@ class RowsService {
 
             // Get current row
             const rowResult = await DatabaseHelper.executeQuery(
-                'SELECT * FROM rows WHERE name = $1 AND farm_id = $2 AND is_deleted = 0',
-                [name, farmId]
+                'SELECT * FROM rows WHERE id = $1 AND farm_id = $2 AND is_deleted = 0',
+                [rowId, farmId]
             )
             if (rowResult.rows.length === 0) {
                 throw new ValidationError('Row not found')
@@ -105,32 +105,32 @@ class RowsService {
 
             // Update row capacity
             const updatedRowResult = await DatabaseHelper.executeQuery(
-                'UPDATE rows SET capacity = $1, updated_at = CURRENT_TIMESTAMP WHERE name = $2 AND farm_id = $3 AND is_deleted = 0 RETURNING *',
-                [newCapacity, name, farmId]
+                'UPDATE rows SET capacity = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND farm_id = $3 AND is_deleted = 0 RETURNING *',
+                [newCapacity, rowId, farmId]
             )
 
             await DatabaseHelper.executeQuery('COMMIT')
-            logger.info(`Row ${name} expanded by ${additionalCapacity} hutches to total capacity ${newCapacity} by user ${userId}`)
+            logger.info(`Row ${rowId} (${currentRow.name}) expanded by ${additionalCapacity} hutches to total capacity ${newCapacity} by user ${userId}`)
             return updatedRowResult.rows[0]
         } catch (error) {
             await DatabaseHelper.executeQuery('ROLLBACK')
-            logger.error(`Error expanding row ${name}: ${error.message}`)
+            logger.error(`Error expanding row ${rowId}: ${error.message}`)
             throw error
         }
     }
 
-    static async getRowByName(name, farmId) {
+    static async getRowById(rowId, farmId) {
         try {
             const result = await DatabaseHelper.executeQuery(
-                'SELECT * FROM rows WHERE name = $1 AND farm_id = $2 AND is_deleted = 0',
-                [name, farmId]
+                'SELECT * FROM rows WHERE id = $1 AND farm_id = $2 AND is_deleted = 0',
+                [rowId, farmId]
             )
             if (result.rows.length === 0) {
                 throw new ValidationError('Row not found')
             }
             return result.rows[0]
         } catch (error) {
-            logger.error(`Error fetching row ${name}: ${error.message}`)
+            logger.error(`Error fetching row ${rowId}: ${error.message}`)
             throw error
         }
     }
@@ -148,46 +148,46 @@ class RowsService {
         }
     }
 
-    static async updateRow(name, farmId, rowData, userId) {
+    static async updateRow(rowId, farmId, rowData, userId) {
         const { description } = rowData
         try {
             const result = await DatabaseHelper.executeQuery(
-                'UPDATE rows SET description = $1, updated_at = CURRENT_TIMESTAMP WHERE name = $2 AND farm_id = $3 AND is_deleted = 0 RETURNING *',
-                [description || null, name, farmId]
+                'UPDATE rows SET description = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND farm_id = $3 AND is_deleted = 0 RETURNING *',
+                [description || null, rowId, farmId]
             )
             if (result.rows.length === 0) {
                 throw new ValidationError('Row not found')
             }
-            logger.info(`Row ${name} updated by user ${userId}`)
+            logger.info(`Row ${rowId} (${result.rows[0].name}) updated by user ${userId}`)
             return result.rows[0]
         } catch (error) {
-            logger.error(`Error updating row ${name}: ${error.message}`)
+            logger.error(`Error updating row ${rowId}: ${error.message}`)
             throw error
         }
     }
 
-    static async deleteRow(name, farmId, userId) {
+    static async deleteRow(rowId, farmId, userId) {
         try {
             await DatabaseHelper.executeQuery('BEGIN')
             const result = await DatabaseHelper.executeQuery(
-                'UPDATE rows SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE name = $1 AND farm_id = $2 AND is_deleted = 0 RETURNING *',
-                [name, farmId]
+                'UPDATE rows SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND farm_id = $2 AND is_deleted = 0 RETURNING *',
+                [rowId, farmId]
             )
             if (result.rows.length === 0) {
                 throw new ValidationError('Row not found')
             }
 
             await DatabaseHelper.executeQuery(
-                'UPDATE hutches SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE row_name = $1 AND farm_id = $2 AND is_deleted = 0',
-                [name, farmId]
+                'UPDATE hutches SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE row_id = $1 AND farm_id = $2 AND is_deleted = 0',
+                [rowId, farmId]
             )
 
             await DatabaseHelper.executeQuery('COMMIT')
-            logger.info(`Row ${name} soft deleted by user ${userId}`)
+            logger.info(`Row ${rowId} (${result.rows[0].name}) soft deleted by user ${userId}`)
             return result.rows[0]
         } catch (error) {
             await DatabaseHelper.executeQuery('ROLLBACK')
-            logger.error(`Error deleting row ${name}: ${error.message}`)
+            logger.error(`Error deleting row ${rowId}: ${error.message}`)
             throw error
         }
     }
