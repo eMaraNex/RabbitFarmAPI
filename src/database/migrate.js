@@ -96,7 +96,8 @@ const migrations = [
 
       -- Create rows table
       CREATE TABLE IF NOT EXISTS rows (
-        name VARCHAR(50) PRIMARY KEY,
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        name VARCHAR(50) NOT NULL UNIQUE,
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
         description TEXT,
         levels TEXT[] NOT NULL DEFAULT ARRAY['A', 'B', 'C']::TEXT[],
@@ -110,7 +111,7 @@ const migrations = [
       -- Create hutches table
       CREATE TABLE IF NOT EXISTS hutches (
         id VARCHAR(50) PRIMARY KEY,
-        row_name VARCHAR(50) REFERENCES rows(name) ON DELETE CASCADE,
+        row_id UUID REFERENCES rows(id) ON DELETE CASCADE,
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
         level VARCHAR(1) CHECK (level IN ('A', 'B', 'C')) NOT NULL,
         position INTEGER NOT NULL CHECK (position BETWEEN 1 AND 6),
@@ -122,7 +123,7 @@ const migrations = [
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(row_name, level, position)
+        UNIQUE(row_id, level, position)
       );
 
       -- Create rabbits table
@@ -529,7 +530,7 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_rabbits_rabbit_id ON rabbits(rabbit_id) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_rabbits_hutch_id ON rabbits(hutch_id) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_rabbits_status ON rabbits(status) WHERE is_deleted = 0;
-      CREATE INDEX IF NOT EXISTS idx_hutches_row_name ON hutches(row_name) WHERE is_deleted = 0;
+      CREATE INDEX IF NOT EXISTS idx_hutches_row_id ON hutches(row_id) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_hutches_farm_id ON hutches(farm_id) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_hutches_is_occupied ON hutches(is_occupied) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_rows_farm_id ON rows(farm_id) WHERE is_deleted = 0;
@@ -571,11 +572,11 @@ const migrations = [
         SET occupied = (
           SELECT COUNT(*)
           FROM hutches
-          WHERE row_name = NEW.row_name
+          WHERE row_id = NEW.row_id
           AND is_occupied = true
           AND is_deleted = 0
         )
-        WHERE name = NEW.row_name
+        WHERE id = NEW.row_id
         AND is_deleted = 0;
         RETURN NEW;
       END;
@@ -629,7 +630,7 @@ const migrations = [
       DROP INDEX IF EXISTS idx_rabbits_rabbit_id;
       DROP INDEX IF EXISTS idx_rabbits_hutch_id;
       DROP INDEX IF EXISTS idx_rabbits_status;
-      DROP INDEX IF EXISTS idx_hutches_row_name;
+      DROP INDEX IF EXISTS idx_hutches_row_id;
       DROP INDEX IF EXISTS idx_hutches_farm_id;
       DROP INDEX IF EXISTS idx_hutches_is_occupied;
       DROP INDEX IF EXISTS idx_rows_farm_id;
@@ -640,19 +641,19 @@ const migrations = [
       DROP INDEX IF EXISTS idx_breeding_records_buck_id;
       DROP INDEX IF EXISTS idx_kit_records_breeding_record_id;
       DROP INDEX IF EXISTS idx_kit_records_farm_id;
-      DROP INDEX IF EXISTS idx_health_records_rabbit_id;
-      DROP INDEX IF EXISTS idx_health_records_date;
-      DROP INDEX IF EXISTS idx_feeding_records_rabbit_id;
-      DROP INDEX IF EXISTS idx_feeding_records_hutch_id;
-      DROP INDEX IF EXISTS idx_feeding_records_date;
-      DROP INDEX IF EXISTS idx_earnings_records_farm_id;
-      DROP INDEX IF EXISTS idx_earnings_records_date;
-      DROP INDEX IF EXISTS idx_production_records_farm_id;
-      DROP INDEX IF EXISTS idx_production_records_date;
-      DROP INDEX IF EXISTS idx_notifications_user_id;
-      DROP INDEX IF EXISTS idx_notifications_is_read;
-      DROP INDEX IF EXISTS idx_activity_logs_user_id;
-      DROP INDEX IF EXISTS idx_activity_logs_farm_id;
+      DROP INDEX IF NOT EXISTS idx_health_records_rabbit_id;
+      DROP INDEX IF NOT EXISTS idx_health_records_date;
+      DROP INDEX IF NOT EXISTS idx_feeding_records_rabbit_id;
+      DROP INDEX IF NOT EXISTS idx_feeding_records_hutch_id;
+      DROP INDEX IF NOT EXISTS idx_feeding_records_date;
+      DROP INDEX IF NOT EXISTS idx_earnings_records_farm_id;
+      DROP INDEX IF NOT EXISTS idx_earnings_records_date;
+      DROP INDEX IF NOT EXISTS idx_production_records_farm_id;
+      DROP INDEX IF NOT EXISTS idx_production_records_date;
+      DROP INDEX IF NOT EXISTS idx_notifications_user_id;
+      DROP INDEX IF NOT EXISTS idx_notifications_is_read;
+      DROP INDEX IF NOT EXISTS idx_activity_logs_user_id;
+      DROP INDEX IF NOT EXISTS idx_activity_logs_farm_id;
     `
   },
   {
