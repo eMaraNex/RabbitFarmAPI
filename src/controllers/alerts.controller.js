@@ -13,7 +13,16 @@ class AlertsController {
             next(error);
         }
     }
-
+  static async getActiveFarm(req, res, next) {
+        try { 
+            const { email } = req.user;
+            const user = await alertsServices.getActiveFarm(email, req.body);
+            return SuccessResponse(res, 201, 'Farm loaded successfully', user)
+        } catch (error) {
+            logger.error(`Loading error: ${error.message}`);
+            next(error);
+        }
+    }
 }
 
 export default AlertsController;

@@ -1,0 +1,20 @@
+name: Send Daily Alert Notifications
+on:
+  schedule:
+    - cron: "*/5 * * * *" # 8:00 AM daily (UTC)
+    - cron: "0 18 * * *" # 6:00 PM daily (UTC)
+
+jobs:
+  send-alerts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get Farm ID and Send Alerts
+        run: |
+          # Get the farm ID
+          FARM_ID=$(curl -s "${{ secrets.API_BASE_URL }}/api/v1/alerts/active" | jq -r '.data[0].farm_id')
+
+          # Send alerts for that farm
+          curl -X POST "${{ secrets.API_BASE_URL }}/api/v1/alerts/mail/$FARM_ID"
+        env:
+          NODE_ENV: production
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}

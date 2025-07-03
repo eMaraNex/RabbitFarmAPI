@@ -96,7 +96,8 @@ const migrations = [
 
       -- Create rows table
       CREATE TABLE IF NOT EXISTS rows (
-        name VARCHAR(50) PRIMARY KEY,
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        name VARCHAR(50) NOT NULL UNIQUE,
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
         description TEXT,
         levels TEXT[] NOT NULL DEFAULT ARRAY['A', 'B', 'C']::TEXT[],
@@ -110,7 +111,7 @@ const migrations = [
       -- Create hutches table
       CREATE TABLE IF NOT EXISTS hutches (
         id VARCHAR(50) PRIMARY KEY,
-        row_name VARCHAR(50) REFERENCES rows(name) ON DELETE CASCADE,
+        row_id UUID REFERENCES rows(id) ON DELETE CASCADE,
         farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
         level VARCHAR(1) CHECK (level IN ('A', 'B', 'C')) NOT NULL,
         position INTEGER NOT NULL CHECK (position BETWEEN 1 AND 6),
@@ -122,7 +123,7 @@ const migrations = [
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(row_name, level, position)
+        UNIQUE(row_id, level, position)
       );
 
       -- Create rabbits table
@@ -529,7 +530,7 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_rabbits_rabbit_id ON rabbits(rabbit_id) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_rabbits_hutch_id ON rabbits(hutch_id) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_rabbits_status ON rabbits(status) WHERE is_deleted = 0;
-      CREATE INDEX IF NOT EXISTS idx_hutches_row_name ON hutches(row_name) WHERE is_deleted = 0;
+      CREATE INDEX IF NOT EXISTS idx_hutches_row_id ON hutches(row_id) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_hutches_farm_id ON hutches(farm_id) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_hutches_is_occupied ON hutches(is_occupied) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_rows_farm_id ON rows(farm_id) WHERE is_deleted = 0;
@@ -571,11 +572,11 @@ const migrations = [
         SET occupied = (
           SELECT COUNT(*)
           FROM hutches
-          WHERE row_name = NEW.row_name
+          WHERE row_id = NEW.row_id
           AND is_occupied = true
           AND is_deleted = 0
         )
-        WHERE name = NEW.row_name
+        WHERE id = NEW.row_id
         AND is_deleted = 0;
         RETURN NEW;
       END;
@@ -629,7 +630,7 @@ const migrations = [
       DROP INDEX IF EXISTS idx_rabbits_rabbit_id;
       DROP INDEX IF EXISTS idx_rabbits_hutch_id;
       DROP INDEX IF EXISTS idx_rabbits_status;
-      DROP INDEX IF EXISTS idx_hutches_row_name;
+      DROP INDEX IF EXISTS idx_hutches_row_id;
       DROP INDEX IF EXISTS idx_hutches_farm_id;
       DROP INDEX IF EXISTS idx_hutches_is_occupied;
       DROP INDEX IF EXISTS idx_rows_farm_id;
@@ -737,6 +738,15 @@ const migrations = [
     version: 9,
     name: 'create_alerts_table',
     up: `
+      -- Create function to update updated_on timestamp
+      CREATE OR REPLACE FUNCTION update_updated_on_column()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        NEW.updated_on = CURRENT_TIMESTAMP;
+        RETURN NEW;
+      END;
+      $$ language 'plpgsql';
+
       -- Create alerts table
       CREATE TABLE IF NOT EXISTS alerts (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -751,6 +761,7 @@ const migrations = [
         user_id UUID REFERENCES users(id) ON DELETE SET NULL,
         rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE SET NULL,
         hutch_id VARCHAR(50) REFERENCES hutches(id) ON DELETE SET NULL,
+        notify_on DATE[] NOT NULL DEFAULT '{}',
         created_on TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_on TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         is_active BOOLEAN DEFAULT true,
@@ -762,25 +773,30 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_alerts_alert_start_date ON alerts(alert_start_date) WHERE is_deleted = false;
       CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status) WHERE is_deleted = false;
       CREATE INDEX IF NOT EXISTS idx_alerts_is_active ON alerts(is_active) WHERE is_deleted = false;
+      CREATE INDEX IF NOT EXISTS idx_alerts_notify_on ON alerts USING GIN (notify_on) WHERE is_deleted = false;
 
-      -- Create trigger for updated_at
-      CREATE TRIGGER update_alerts_updated_at
+      -- Create trigger for updated_on
+      CREATE TRIGGER update_alerts_updated_on
       BEFORE UPDATE ON alerts
       FOR EACH ROW
-      EXECUTE FUNCTION update_updated_at_column();
+      EXECUTE FUNCTION update_updated_on_column();
     `,
     down: `
       -- Drop trigger
-      DROP TRIGGER IF EXISTS update_alerts_updated_at ON alerts;
+      DROP TRIGGER IF EXISTS update_alerts_updated_on ON alerts;
 
       -- Drop indexes
       DROP INDEX IF EXISTS idx_alerts_farm_id;
       DROP INDEX IF EXISTS idx_alerts_alert_start_date;
       DROP INDEX IF EXISTS idx_alerts_status;
       DROP INDEX IF EXISTS idx_alerts_is_active;
+      DROP INDEX IF EXISTS idx_alerts_notify_on;
 
       -- Drop table
       DROP TABLE IF EXISTS alerts CASCADE;
+
+      -- Drop function
+      DROP FUNCTION IF EXISTS update_updated_on_column;
     `
   }
 ];
