@@ -4,14 +4,43 @@ import { ValidationError } from '../middleware/errors.js';
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../config/database.js';
 import AlertService from './alerts.services.js';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc.js';
+import timezone from 'dayjs/plugin/timezone.js';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+// Utility function to get UTC date as YYYY-MM-DD
+function getUTCDateString(date) {
+    return dayjs(date).utc().format('YYYY-MM-DD');
+}
+
+// Utility function to get local date as YYYY-MM-DD (default Africa/Nairobi)
+function getLocalDateString(date, timezone = 'Africa/Nairobi') {
+    return dayjs(date).tz(timezone).format('YYYY-MM-DD');
+}
+
+// Utility function to format date for display (default Africa/Nairobi)
+function formatLocalDate(date, timezone = 'Africa/Nairobi') {
+    return dayjs(date).tz(timezone).format('MMMM D, YYYY');
+}
 
 class BreedingService {
     static async createBreedingRecord(breedingData, userId) {
-        const { farm_id, doe_id, buck_id, mating_date, expected_birth_date, notes } = breedingData;
+        const { farm_id, doe_id, buck_id, mating_date, expected_birth_date, notes, immediate_notify_date, alert_message } = breedingData;
 
         if (!farm_id || !doe_id || !buck_id || !mating_date || !expected_birth_date) {
             throw new ValidationError('Missing required breeding record fields');
         }
+
+        // Validate immediate_notify_date if provided
+        let notifyOnDate = immediate_notify_date;
+        if (notifyOnDate && !dayjs(notifyOnDate, 'YYYY-MM-DD', true).isValid()) {
+            throw new ValidationError('Invalid immediate_notify_date format; must be YYYY-MM-DD');
+        }
+        // Fallback to local date in Africa/Nairobi
+        notifyOnDate = notifyOnDate || getLocalDateString(new Date(), 'Africa/Nairobi');
 
         try {
             await DatabaseHelper.executeQuery('BEGIN');
@@ -33,11 +62,14 @@ class BreedingService {
                 throw new ValidationError('Buck not found or invalid');
             }
 
+            // Parse mating_date as UTC
+            const matingDateUTC = dayjs(mating_date).utc();
+
             // Check if the buck has served within the last 3 days
             const recentService = await DatabaseHelper.executeQuery(
                 `SELECT 1 FROM breeding_records 
                  WHERE buck_id = $1 AND farm_id = $2 AND mating_date >= $3 AND is_deleted = 0`,
-                [buck_id, farm_id, new Date(new Date(mating_date).getTime() - 3 * 24 * 60 * 60 * 1000)]
+                [buck_id, farm_id, matingDateUTC.subtract(3, 'day').toDate()]
             );
             if (recentService.rows.length > 0) {
                 throw new ValidationError('Buck has served within the last 3 days');
@@ -51,16 +83,16 @@ class BreedingService {
                 [doe_id, farm_id]
             );
             if (recentDoeService.rows.length > 0) {
-                const lastBirth = new Date(recentDoeService.rows[0].actual_birth_date);
-                const weaningDate = new Date(lastBirth.getTime() + 42 * 24 * 60 * 60 * 1000);
-                const oneWeekAfterWeaning = new Date(weaningDate.getTime() + 7 * 24 * 60 * 60 * 1000);
-                if (new Date(mating_date) < oneWeekAfterWeaning) {
+                const lastBirth = dayjs(recentDoeService.rows[0].actual_birth_date);
+                const weaningDate = lastBirth.add(42, 'day');
+                const oneWeekAfterWeaning = weaningDate.add(7, 'day');
+                if (matingDateUTC.isBefore(oneWeekAfterWeaning)) {
                     throw new ValidationError('Doe cannot be served within 1 week of weaning');
                 }
             }
 
             // Set alert date for pregnancy confirmation
-            const alertDate = new Date(new Date(mating_date).getTime() + 21 * 24 * 60 * 60 * 1000);
+            const alertDate = matingDateUTC.add(21, 'day').toDate();
 
             // Insert breeding record
             const breedingResult = await DatabaseHelper.executeQuery(
@@ -85,34 +117,44 @@ class BreedingService {
             const hutch_id = hutchResult.rows[0]?.hutch_id;
 
             // Create immediate breeding success alert
+            const defaultMessage = `Breeding recorded for doe ${doe_id} and buck ${buck_id} on ${formatLocalDate(mating_date, 'Africa/Nairobi')}. Expected birth date: ${formatLocalDate(expected_birth_date, 'Africa/Nairobi')}`;
             await AlertService.createAlert({
                 farm_id,
                 user_id: userId,
                 rabbit_id: doe_id,
                 hutch_id,
                 name: `Breeding Success for ${doe_id} and ${buck_id}`,
-                alert_start_date: new Date(),
+                alert_start_date: getUTCDateString(new Date()) + 'T00:00:00Z',
                 alert_type: 'breeding',
-                severity: 'info',
-                message: `Breeding recorded for doe ${doe_id} and buck ${buck_id} on ${new Date(mating_date).toLocaleDateString()}. Expected birth date: ${new Date(expected_birth_date).toLocaleDateString()}`
+                severity: 'medium',
+                message: alert_message || defaultMessage,
+                notify_on: [notifyOnDate]
             });
 
-            // Create scheduled alerts (only trigger day before or on the date)
+            // Create scheduled alerts (trigger day before and on the date)
             const alerts = [
                 {
                     name: `Add Nesting Box for ${doe_id}`,
-                    alert_start_date: new Date(new Date(mating_date).getTime() + 26 * 24 * 60 * 60 * 1000),
+                    alert_start_date: getUTCDateString(matingDateUTC.add(26, 'day').toDate()) + 'T00:00:00Z',
                     alert_type: 'breeding',
                     severity: 'high',
-                    message: `Add nesting box for rabbit ${doe_id} on hutch ${hutch_id || 'unknown'} by ${new Date(new Date(mating_date).getTime() + 26 * 24 * 60 * 60 * 1000).toLocaleDateString()}`
+                    message: `Add nesting box for rabbit ${doe_id} on hutch ${hutch_id || 'unknown'} by ${formatLocalDate(matingDateUTC.add(26, 'day'), 'Africa/Nairobi')}`,
+                    notify_on: [
+                        getUTCDateString(matingDateUTC.add(25, 'day').toDate()),
+                        getUTCDateString(matingDateUTC.add(26, 'day').toDate())
+                    ]
                 },
                 // Birth check alerts (days 28-31)
                 ...Array.from({ length: 4 }, (_, i) => ({
                     name: `Check Birth for ${doe_id}`,
-                    alert_start_date: new Date(new Date(mating_date).getTime() + (28 + i) * 24 * 60 * 60 * 1000),
+                    alert_start_date: getUTCDateString(matingDateUTC.add(28 + i, 'day').toDate()) + 'T00:00:00Z',
                     alert_type: 'birth',
                     severity: 'high',
-                    message: `Check for birth of rabbit ${doe_id} on hutch ${hutch_id || 'unknown'} on ${new Date(new Date(mating_date).getTime() + (28 + i) * 24 * 60 * 60 * 1000).toLocaleDateString()}`
+                    message: `Check for birth of rabbit ${doe_id} on hutch ${hutch_id || 'unknown'} on ${formatLocalDate(matingDateUTC.add(28 + i, 'day'), 'Africa/Nairobi')}`,
+                    notify_on: [
+                        getUTCDateString(matingDateUTC.add(27 + i, 'day').toDate()),
+                        getUTCDateString(matingDateUTC.add(28 + i, 'day').toDate())
+                    ]
                 }))
             ];
 
@@ -122,11 +164,7 @@ class BreedingService {
                     user_id: userId,
                     rabbit_id: doe_id,
                     hutch_id,
-                    ...alert,
-                    notify_on: [
-                        new Date(new Date(alert.alert_start_date).getTime() - 24 * 60 * 60 * 1000), // Day before
-                        alert.alert_start_date // On the day
-                    ]
+                    ...alert
                 });
             }
 
@@ -278,28 +316,41 @@ class BreedingService {
                 );
                 const hutch_id = hutchResult.rows[0]?.hutch_id;
 
-                // Create scheduled post-birth alerts (only trigger day before or on the date)
+                // Create scheduled post-birth alerts
+                const actualBirthDateUTC = dayjs(actual_birth_date).utc();
                 const alerts = [
                     {
                         name: `Fostering Check for ${breedingRecord.doe_id}`,
-                        alert_start_date: new Date(new Date(actual_birth_date).getTime() + 4 * 24 * 60 * 60 * 1000),
+                        alert_start_date: getUTCDateString(actualBirthDateUTC.add(4, 'day').toDate()) + 'T00:00:00Z',
                         alert_type: 'birth',
                         severity: 'medium',
-                        message: `Check fostering needs for rabbit ${breedingRecord.doe_id} on hutch ${hutch_id || 'unknown'} by ${new Date(new Date(actual_birth_date).getTime() + 4 * 24 * 60 * 60 * 1000).toLocaleDateString()}`
+                        message: `Check fostering needs for rabbit ${breedingRecord.doe_id} on hutch ${hutch_id || 'unknown'} by ${formatLocalDate(actualBirthDateUTC.add(4, 'day'), 'Africa/Nairobi')}`,
+                        notify_on: [
+                            getUTCDateString(actualBirthDateUTC.add(3, 'day').toDate()),
+                            getUTCDateString(actualBirthDateUTC.add(4, 'day').toDate())
+                        ]
                     },
                     {
                         name: `Remove Nesting Box for ${breedingRecord.doe_id}`,
-                        alert_start_date: new Date(new Date(actual_birth_date).getTime() + 20 * 24 * 60 * 60 * 1000),
+                        alert_start_date: getUTCDateString(actualBirthDateUTC.add(20, 'day').toDate()) + 'T00:00:00Z',
                         alert_type: 'birth',
                         severity: 'medium',
-                        message: `Remove nesting box for rabbit ${breedingRecord.doe_id} on hutch ${hutch_id || 'unknown'} by ${new Date(new Date(actual_birth_date).getTime() + 20 * 24 * 60 * 60 * 1000).toLocaleDateString()}`
+                        message: `Remove nesting box for rabbit ${breedingRecord.doe_id} on hutch ${hutch_id || 'unknown'} by ${formatLocalDate(actualBirthDateUTC.add(20, 'day'), 'Africa/Nairobi')}`,
+                        notify_on: [
+                            getUTCDateString(actualBirthDateUTC.add(19, 'day').toDate()),
+                            getUTCDateString(actualBirthDateUTC.add(20, 'day').toDate())
+                        ]
                     },
                     {
                         name: `Wean Kits for ${breedingRecord.doe_id}`,
-                        alert_start_date: new Date(new Date(actual_birth_date).getTime() + 42 * 24 * 60 * 60 * 1000),
+                        alert_start_date: getUTCDateString(actualBirthDateUTC.add(42, 'day').toDate()) + 'T00:00:00Z',
                         alert_type: 'birth',
                         severity: 'high',
-                        message: `Wean kits for rabbit ${breedingRecord.doe_id} on hutch ${hutch_id || 'unknown'} by ${new Date(new Date(actual_birth_date).getTime() + 42 * 24 * 60 * 60 * 1000).toLocaleDateString()}`
+                        message: `Wean kits for rabbit ${breedingRecord.doe_id} on hutch ${hutch_id || 'unknown'} by ${formatLocalDate(actualBirthDateUTC.add(42, 'day'), 'Africa/Nairobi')}`,
+                        notify_on: [
+                            getUTCDateString(actualBirthDateUTC.add(41, 'day').toDate()),
+                            getUTCDateString(actualBirthDateUTC.add(42, 'day').toDate())
+                        ]
                     }
                 ];
 
@@ -309,11 +360,7 @@ class BreedingService {
                         user_id: userId,
                         rabbit_id: breedingRecord.doe_id,
                         hutch_id,
-                        ...alert,
-                        notify_on: [
-                            new Date(new Date(alert.alert_start_date).getTime() - 24 * 60 * 60 * 1000), // Day before
-                            alert.alert_start_date // On the day
-                        ]
+                        ...alert
                     });
                 }
             }
@@ -394,7 +441,7 @@ class BreedingService {
     }
     static async createKitRecord(kits, farm_id, userId) {
         const client = await pool.connect();
-        const { kits: kitz } = kits;
+        const { kitz } = kits;
         try {
             await client.query('BEGIN');
 
@@ -508,7 +555,8 @@ class BreedingService {
                 }
 
                 // Calculate weaning date
-                const weaningDate = new Date(new Date(actual_birth_date).getTime() + 42 * 24 * 60 * 60 * 1000);
+                const actualBirthDateUTC = dayjs(actual_birth_date).utc();
+                const weaningDate = actualBirthDateUTC.add(42, 'day').toDate();
 
                 // Insert into rabbit_birth_history if not exists
                 const birthHistoryResult = await client.query(
@@ -562,7 +610,8 @@ class BreedingService {
             }
 
             // Create alert for relocating kits post-weaning
-            const weaningDate = new Date(new Date(kitz[0].actual_birth_date).getTime() + 42 * 24 * 60 * 60 * 1000);
+            const actualBirthDateUTC = dayjs(kitz[0].actual_birth_date).utc();
+            const weaningDate = actualBirthDateUTC.add(42, 'day').toDate();
             const hutchResult = await client.query(
                 'SELECT hutch_id FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND is_deleted = 0',
                 [kitz[0].parent_female_id, farm_id]
@@ -575,13 +624,13 @@ class BreedingService {
                 rabbit_id: kitz[0].parent_female_id,
                 hutch_id,
                 name: `Relocate Kits for ${kitz[0].parent_female_id}`,
-                alert_start_date: weaningDate,
+                alert_start_date: getUTCDateString(weaningDate) + 'T00:00:00Z',
                 alert_type: 'birth',
                 severity: 'medium',
-                message: `Relocate kits for rabbit ${kitz[0].parent_female_id} to individual hutches by ${weaningDate.toLocaleDateString()}`,
+                message: `Relocate kits for rabbit ${kitz[0].parent_female_id} to individual hutches by ${formatLocalDate(weaningDate, 'Africa/Nairobi')}`,
                 notify_on: [
-                    new Date(new Date(weaningDate).getTime() - 24 * 60 * 60 * 1000), // Day before
-                    weaningDate // On the day
+                    getUTCDateString(dayjs(weaningDate).subtract(1, 'day').toDate()),
+                    getUTCDateString(weaningDate)
                 ]
             });
 

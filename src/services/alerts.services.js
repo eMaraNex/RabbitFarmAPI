@@ -5,9 +5,30 @@ import { v4 as uuidv4 } from 'uuid';
 import EmailService from './email.services.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc.js';
+import timezone from 'dayjs/plugin/timezone.js';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Utility function to get UTC date as YYYY-MM-DD
+function getUTCDateString(date) {
+    return dayjs(date).utc().format('YYYY-MM-DD');
+}
+
+// Utility function to get local date as YYYY-MM-DD (default Africa/Nairobi)
+function getLocalDateString(date, timezone = 'Africa/Nairobi') {
+    return dayjs(date).tz(timezone).format('YYYY-MM-DD');
+}
+
+// Utility function to format date for display (default Africa/Nairobi)
+function formatLocalDate(date, timezone = 'Africa/Nairobi') {
+    return dayjs(date).tz(timezone).format('MMMM D, YYYY');
+}
 
 class AlertService {
     constructor() {
@@ -39,10 +60,31 @@ class AlertService {
             throw new ValidationError('Missing required alert fields');
         }
 
-        // Default notify_on to day before and on alert_start_date if not provided
+        // Validate severity
+        const validSeverities = ['low', 'medium', 'high'];
+        if (!validSeverities.includes(severity)) {
+            throw new ValidationError(`Invalid severity value: ${severity}. Must be one of ${validSeverities.join(', ')}`);
+        }
+
+        // Validate notify_on dates
+        if (notify_on) {
+            for (const date of notify_on) {
+                if (!dayjs(date, 'YYYY-MM-DD', true).isValid()) {
+                    throw new ValidationError(`Invalid notify_on date: ${date}. Must be YYYY-MM-DD`);
+                }
+            }
+        }
+
+        // Parse alert_start_date as UTC
+        const startDateUTC = dayjs(alert_start_date).utc();
+        if (!startDateUTC.isValid()) {
+            throw new ValidationError('Invalid alert_start_date format');
+        }
+
+        // Default notify_on to day before and on alert_start_date in UTC if not provided
         const defaultNotifyOn = notify_on || [
-            new Date(new Date(alert_start_date).getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            new Date(alert_start_date).toISOString().split('T')[0]
+            getUTCDateString(startDateUTC.subtract(1, 'day').toDate()),
+            getUTCDateString(startDateUTC.toDate())
         ];
 
         try {
@@ -75,9 +117,16 @@ class AlertService {
             await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Alert ${alert.id} created for farm ${farm_id}`);
 
-            // Send notification if current date is in notify_on
-            const currentDate = new Date().toISOString().split('T')[0];
-            if (alert.notify_on.includes(currentDate)) {
+            // Send notification if current local date (Africa/Nairobi) is in notify_on
+            const currentLocalDate = getLocalDateString(new Date(), 'Africa/Nairobi');
+            const currentDate = dayjs(currentLocalDate, 'YYYY-MM-DD', true);
+
+            const shouldNotify = alert.notify_on.some(notifyDate => {
+                const alertDate = dayjs(notifyDate).tz('Africa/Nairobi');
+                return currentDate.isSame(alertDate, 'day');
+            });
+
+            if (shouldNotify) {
                 await this.sendAlertNotification(alert);
             }
 
@@ -95,10 +144,10 @@ class AlertService {
      */
     async getDueAlerts() {
         try {
-            const currentDate = new Date().toISOString().split('T')[0];
+            const currentDate = getUTCDateString(new Date());
             const result = await DatabaseHelper.executeQuery(
                 `SELECT * FROM alerts
-                 WHERE notify_on @> ARRAY[$1]::date[]
+                 WHERE $1::date = ANY(notify_on)
                  AND status = 'pending'
                  AND is_active = true
                  AND is_deleted = false`,
@@ -119,8 +168,6 @@ class AlertService {
     async sendAlertNotification(alert) {
         try {
             await DatabaseHelper.executeQuery('BEGIN');
-            console.log('Current directory:', process.cwd());
-            console.log('__dirname:', __dirname);
 
             // Get user email
             const userResult = await DatabaseHelper.executeQuery(
@@ -132,12 +179,6 @@ class AlertService {
             console.log('Resolved templatePath:', templatePath);
 
             if (userEmail) {
-                const currentDate = new Date().toISOString().split('T')[0];
-                if (!alert.notify_on.includes(currentDate)) {
-                    logger.info(`Alert ${alert.id} not sent: current date ${currentDate} not in notify_on`);
-                    await DatabaseHelper.executeQuery('COMMIT');
-                    return { success: false, message: 'Notification not sent: current date not in notify_on' };
-                }
 
                 const emailResult = await this.emailService.sendEmail({
                     ...alert,
@@ -192,34 +233,24 @@ class AlertService {
     }
 
     /**
-     * Get alerts for a farm
+     * Get alerts for a farm where notify_on matches today's date in Africa/Nairobi
      * @param {string} farmId - Farm UUID
-     * @param {Object} filters - Optional filters
      * @returns {Promise<Array>} - List of alerts
      */
-    async getFarmAlerts(farmId, filters = {}) {
-        const { alert_type, severity, status, limit = 10 } = filters;
-        let query = `SELECT * FROM alerts al
-                LEFT OUTER JOIN rabbits rb ON rb.farm_id = al.farm_id
-                WHERE al.farm_id = $1 AND rb.is_pregnant = true`;
-        const params = [farmId];
-        let paramCount = 2;
-
-        if (alert_type) {
-            query += ` AND alert_type = $${paramCount++}`;
-            params.push(alert_type);
-        }
-        if (severity) {
-            query += ` AND severity = $${paramCount++}`;
-            params.push(severity);
-        }
-        if (status) {
-            query += ` AND status = $${paramCount++}`;
-            params.push(status);
-        }
-
-        query += ` ORDER BY severity DESC, alert_start_date ASC LIMIT $${paramCount}`;
-        params.push(limit);
+    async getFarmAlerts(farmId) {
+        const currentLocalDate = getLocalDateString(new Date(), 'Africa/Nairobi'); 
+        const query = `
+            SELECT * FROM alerts
+            WHERE farm_id = $1
+            AND EXISTS (
+                SELECT 1 FROM unnest(notify_on) AS n(date)
+                WHERE (n.date::TIMESTAMP AT TIME ZONE 'Africa/Nairobi')::DATE = $2
+            )
+            AND is_active = true
+            AND is_deleted = false
+            ORDER BY severity DESC, alert_start_date ASC
+        `;
+        const params = [farmId, currentLocalDate];
 
         try {
             const result = await DatabaseHelper.executeQuery(query, params);
@@ -244,6 +275,11 @@ class AlertService {
             let paramCount = 3;
 
             if (notify_on) {
+                for (const date of notify_on) {
+                    if (!dayjs(date, 'YYYY-MM-DD', true).isValid()) {
+                        throw new ValidationError(`Invalid notify_on date: ${date}. Must be YYYY-MM-DD`);
+                    }
+                }
                 query += `, notify_on = $${paramCount++}`;
                 params.push(notify_on);
             }
@@ -263,6 +299,25 @@ class AlertService {
             throw error;
         }
     }
+
+    /**
+     * Get active farm id for logged in user
+     * @returns {Promise<Object>} - Farm ID object
+     */
+    async getActiveFarm(email) {
+        const query = `
+            SELECT f.id from farms f
+            INNER JOIN users u ON u.farm_id = f.id
+            WHERE f.is_deleted = 0 AND u.is_active = 1 AND u.email = $1
+        `;
+        try {
+            const result = await DatabaseHelper.executeQuery(query, [email]);
+            return result.rows.map(row => ({ farm_id: row.id }));
+        } catch (error) {
+            logger.error(`Error fetching active farms: ${error.message}`);
+            throw error;
+        }
+}
 }
 
 export default new AlertService();
