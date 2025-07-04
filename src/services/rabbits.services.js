@@ -113,7 +113,7 @@ class RabbitsService {
         try {
             const result = await DatabaseHelper.executeQuery(
                 `
-                SELECT r.*, h.id AS hutch_id, h.row_name,
+                SELECT r.*, h.id AS hutch_id,
                     (SELECT JSON_AGG(
                         JSON_BUILD_OBJECT(
                             'hutch_id', hr.hutch_id,
@@ -402,7 +402,7 @@ class RabbitsService {
         try {
             const result = await DatabaseHelper.executeQuery(
                 `
-                SELECT r.*, h.id AS hutch_id, h.row_name,
+                SELECT r.*, h.id AS hutch_id,
                     (SELECT JSON_AGG(
                         JSON_BUILD_OBJECT(
                             'hutch_id', hr.hutch_id,
