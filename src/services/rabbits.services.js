@@ -374,20 +374,6 @@ class RabbitsService {
                 }
             }
 
-            // Insert earnings record if sold
-            if (reason === 'Sale' && sale_amount) {
-                await DatabaseHelper.executeQuery(
-                    `INSERT INTO earnings_records (
-                        id, farm_id, rabbit_id, type, amount, currency, date, weight, sale_type, buyer_name, notes, created_at, is_deleted
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP, 0)`,
-                    [
-                        uuidv4(), farmId, rabbit.rabbit_id, 'rabbit_sale', sale_amount, currency || 'USD',
-                        date || new Date().toISOString().split('T')[0], sale_weight || null, sale_type || 'whole',
-                        sold_to || null, sale_notes || null
-                    ]
-                );
-            }
-
             await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Rabbit ${rabbitId} soft deleted by user ${userId}`);
             return deletedRabbit;
