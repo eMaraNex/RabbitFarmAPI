@@ -26,6 +26,18 @@ class BreedingController {
         }
     }
 
+    static async getBreedingHistoryByRabbitId(req, res, next) {
+        try {
+            const { farmId, rabbitId } = req.params;
+            const breedingHistory = await BreedingService.getBreedingHistoryByRabbitId(farmId, rabbitId);
+            return SuccessResponse(res, 200, 'Breeding history retrieved successfully', breedingHistory);
+        }
+        catch (error) {
+            logger.error(`Get breeding history by rabbit ID error: ${error.message}`);
+            next(error);
+        }
+    }
+
     static async getAllBreedingRecords(req, res, next) {
         try {
             const { farmId } = req.params;
