@@ -490,4 +490,7 @@ router.post('/kits/:farmId', authMiddleware, BreedingController.createKitRecord)
  */
 router.put('/kits/:kitId', authMiddleware, validateRequest(kitUpdateSchema), BreedingController.updateKitRecord);
 
+// Get breeding history of a single rabbit using its rabbit id.
+router.get('/history/:farmId/:rabbitId', authMiddleware, BreedingController.getBreedingHistoryByRabbitId);
+
 export default router;

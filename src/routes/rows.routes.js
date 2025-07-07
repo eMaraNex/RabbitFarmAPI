@@ -121,7 +121,7 @@ const router = express.Router();
  *       401:
  *         description: Unauthorized
  */
-router.post('/:farmId', authMiddleware, validateRequest(rowSchema), RowsController.createRow);
+router.post('/create/:farmId', authMiddleware, RowsController.createRow);
 
 /**
  * @swagger
@@ -160,7 +160,7 @@ router.post('/:farmId', authMiddleware, validateRequest(rowSchema), RowsControll
  *       401:
  *         description: Unauthorized
  */
-router.get('/:farmId', authMiddleware, RowsController.getAllRows);
+router.get('/list/:farmId', authMiddleware, RowsController.getAllRows);
 
 /**
  * @swagger
@@ -205,7 +205,7 @@ router.get('/:farmId', authMiddleware, RowsController.getAllRows);
  *       401:
  *         description: Unauthorized
  */
-router.get('/:farmId/:name', authMiddleware, RowsController.getRowByName);
+router.get('/list/:farmId/:name', authMiddleware, RowsController.getRowByName);
 
 /**
  * @swagger
@@ -265,7 +265,7 @@ router.get('/:farmId/:name', authMiddleware, RowsController.getRowByName);
  *       401:
  *         description: Unauthorized
  */
-router.put('/:farmId/:name', authMiddleware, validateRequest(rowUpdateSchema), RowsController.updateRow);
+router.put('/update//:farmId/:name', authMiddleware, RowsController.updateRow);
 
 /**
  * @swagger
@@ -310,7 +310,7 @@ router.put('/:farmId/:name', authMiddleware, validateRequest(rowUpdateSchema), R
  *       401:
  *         description: Unauthorized
  */
-router.delete('/:farmId/:name', authMiddleware, RowsController.deleteRow);
+router.delete('/delete/:farmId/:name', authMiddleware, RowsController.deleteRow);
 
 /**
  * @swagger
@@ -349,6 +349,8 @@ router.delete('/:farmId/:name', authMiddleware, RowsController.deleteRow);
  *       401:
  *         description: Unauthorized
  */
-router.post('/expand', authMiddleware, validateRequest(rowExpandSchema), RowsController.expandRowCapacity);
+// router.post('/expand', authMiddleware, validateRequest(rowExpandSchema), RowsController.expandRowCapacity);
+router.post('/expand', authMiddleware, RowsController.expandRowCapacity);
+
 
 export default router;

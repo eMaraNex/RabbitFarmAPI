@@ -64,9 +64,9 @@ class RowsController {
 
     static async expandRowCapacity(req, res, next) {
         try {
-            const { name, farm_id: farmId, additionalCapacity } = req.body;
+            const { name, farm_id: farmId, additionalCapacity, row_id } = req.body;
             const userId = req.userId;
-            const updatedRow = await RowsService.expandRowCapacity(name, farmId, additionalCapacity, userId);
+            const updatedRow = await RowsService.expandRowCapacity(name, farmId, additionalCapacity, userId, row_id);
             res.status(200).json({
                 success: true,
                 message: 'Row capacity expanded successfully',

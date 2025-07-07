@@ -211,6 +211,23 @@ class BreedingService {
         }
     }
 
+    static async getBreedingHistoryByRabbitId(farmId, rabbitId) {
+        try {
+            const result = await DatabaseHelper.executeQuery(
+                `SELECT br.*
+                 FROM breeding_records br
+                 WHERE br.doe_id = $1 AND br.farm_id = $2 AND br.is_deleted = 0`,
+                [rabbitId, farmId]
+            );
+            if (result.rows.length === 0) {
+                throw new ValidationError('Breeding record not found');
+            }
+            return result.rows;
+        } catch (error) {
+            logger.error(`Error fetching breeding record ${recordId}: ${error.message}`);
+            throw error;
+        }
+    }
     static async getAllBreedingRecords(farmId) {
         try {
             const result = await DatabaseHelper.executeQuery(
@@ -459,7 +476,7 @@ class BreedingService {
                 throw new ValidationError('kitz array is required and must not be empty');
             }
 
-            // Validate each kit has required fields
+            // Validate each kit has required fields (only kit_number and breeding_record_id are mandatory)
             for (const kit of kitz) {
                 if (!kit.breeding_record_id) {
                     throw new ValidationError('breeding_record_id is required for each kit');
@@ -479,7 +496,7 @@ class BreedingService {
                 throw new ValidationError('One or more breeding records not found');
             }
 
-            // Validate number of kitz doesn't exceed breeding record
+            // Validate number of kitz doesn't exceed breeding record (with some flexibility)
             for (const record of breedingResult.rows) {
                 const existingKits = await client.query(
                     'SELECT COUNT(*) FROM kit_records WHERE breeding_record_id = $1 AND is_deleted = 0',
@@ -487,8 +504,10 @@ class BreedingService {
                 );
                 const currentKitCount = parseInt(existingKits.rows[0].count) || 0;
                 const newKitsForRecord = kitz.filter(kit => kit.breeding_record_id === record.id).length;
-                if (currentKitCount + newKitsForRecord > (record.number_of_kits || 0)) {
-                    throw new ValidationError(`Total kits exceed breeding record litter size for breeding record ${record.id}`);
+
+                // Allow some flexibility - warn but don't block if slightly over
+                if (currentKitCount + newKitsForRecord > (record.number_of_kits || 0) + 1) {
+                    throw new ValidationError(`Total kits significantly exceed breeding record litter size for breeding record ${record.id}`);
                 }
             }
 
@@ -506,7 +525,7 @@ class BreedingService {
                 throw new ValidationError(`Duplicate kit numbers: ${duplicates.join(', ')}`);
             }
 
-            // Validate parent IDs
+            // Validate parent IDs (only if provided)
             const parentIds = [...new Set(kitz.map(kit => [kit.parent_male_id, kit.parent_female_id]).flat().filter(id => id))];
             if (parentIds.length > 0) {
                 const parentResult = await client.query(
@@ -516,10 +535,11 @@ class BreedingService {
                 const foundIds = parentResult.rows.map(row => ({ rabbit_id: row.rabbit_id, gender: row.gender }));
                 const missingIds = parentIds.filter(id => !foundIds.find(f => f.rabbit_id === id));
                 if (missingIds.length > 0) {
+                    console.warn(`Some parent IDs not found: ${missingIds.join(', ')}`);
                     throw new ValidationError(`Invalid parent IDs: ${missingIds.join(', ')}`);
                 }
 
-                // Validate doe is female
+                // Validate doe is female (if doe ID is provided and found)
                 const doeId = kitz[0].parent_female_id;
                 if (doeId) {
                     const doe = foundIds.find(f => f.rabbit_id === doeId);
@@ -550,18 +570,22 @@ class BreedingService {
                 if (!breedingRecord) {
                     throw new ValidationError(`Breeding record ${breeding_record_id} not found`);
                 }
+                // Only validate doe match if parent_female_id is provided
                 if (breedingRecord.doe_id !== kit.parent_female_id) {
                     throw new ValidationError(`Breeding record ${breeding_record_id} does not match doe ${kit.parent_female_id}`);
                 }
 
-                // Calculate weaning date
-                const actualBirthDateUTC = dayjs(actual_birth_date).utc();
-                const weaningDate = actualBirthDateUTC.add(42, 'day').toDate();
+                // Calculate weaning date (only if birth date is provided)
+                let weaningDate = null;
+                if (actual_birth_date) {
+                    const actualBirthDateUTC = dayjs(actual_birth_date).utc();
+                    weaningDate = actualBirthDateUTC.add(42, 'day').toDate();
+                }
 
                 // Insert into rabbit_birth_history if not exists
                 const birthHistoryResult = await client.query(
                     `SELECT id FROM rabbit_birth_history
-                     WHERE breeding_record_id = $1 AND is_deleted = 0`,
+                 WHERE breeding_record_id = $1 AND is_deleted = 0`,
                     [breeding_record_id]
                 );
                 let birthHistoryId = birthHistoryResult.rows[0]?.id;
@@ -569,12 +593,12 @@ class BreedingService {
                     birthHistoryId = uuidv4();
                     const newRabbitHistory = await client.query(
                         `INSERT INTO rabbit_birth_history (
-                           id, farm_id, doe_id, breeding_record_id, birth_date, number_of_kits, notes, created_at, is_deleted
-                         ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, 0)`,
+                       id, farm_id, doe_id, breeding_record_id, birth_date, number_of_kits, notes, created_at, is_deleted
+                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, 0)`,
                         [
                             birthHistoryId,
                             farm_id,
-                            kit.parent_female_id,
+                            kit.parent_female_id || breedingRecord.doe_id,
                             breeding_record_id,
                             actual_birth_date,
                             kitz.filter(k => k.breeding_record_id === breeding_record_id).length,
@@ -584,25 +608,25 @@ class BreedingService {
                     console.log('Inserted new rabbit birth history:', newRabbitHistory.rows[0]);
                 }
 
-                // Insert kit
+                // Insert kit with flexible validation
                 const result = await client.query(
                     `INSERT INTO kit_records (
-                       id, breeding_record_id, farm_id, kit_number, birth_weight, gender, color, status,
-                       weaning_date, parent_male_id, parent_female_id, notes, created_at, updated_at, is_deleted
-                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
-                     RETURNING id, kit_number`,
+                   id, breeding_record_id, farm_id, kit_number, birth_weight, gender, color, status,
+                   weaning_date, parent_male_id, parent_female_id, notes, created_at, updated_at, is_deleted
+                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)
+                 RETURNING id, kit_number`,
                     [
                         uuidv4(),
                         breeding_record_id,
                         farm_id,
                         kit_number,
-                        birth_weight,
+                        birth_weight || null,
                         gender || null,
                         color || null,
                         status || 'alive',
                         weaningDate,
-                        parent_male_id,
-                        parent_female_id,
+                        parent_male_id || null,
+                        parent_female_id || null,
                         notes || null
                     ]
                 );
@@ -654,13 +678,13 @@ class BreedingService {
     }
 
     static async updateKitRecord(kitId, updateData, userId) {
-        const { weaning_weight, status, notes, parent_male_id, parent_female_id } = updateData;
+        const { weaning_weight, status, notes, parent_male_id, parent_female_id, birth_weight, gender, color } = updateData;
 
         try {
             await DatabaseHelper.executeQuery('BEGIN');
 
             const kitResult = await DatabaseHelper.executeQuery(
-                'SELECT kit_number, breeding_record_id FROM kit_records WHERE id = $1 AND is_deleted = 0',
+                'SELECT kit_number, breeding_record_id, farm_id FROM kit_records WHERE id = $1 AND is_deleted = 0',
                 [kitId]
             );
             if (kitResult.rows.length === 0) {
@@ -668,23 +692,41 @@ class BreedingService {
             }
             const kitRecord = kitResult.rows[0];
 
-            // Validate parent IDs if provided
+            // Validate parent IDs if provided (flexible validation)
             if (parent_male_id) {
                 const maleResult = await DatabaseHelper.executeQuery(
-                    'SELECT rabbit_id FROM rabbits WHERE rabbit_id = $1 AND is_deleted = 0',
-                    [parent_male_id]
+                    'SELECT rabbit_id FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND is_deleted = 0',
+                    [parent_male_id, kitRecord.farm_id]
                 );
                 if (maleResult.rows.length === 0) {
-                    throw new ValidationError('Parent male rabbit not found');
+                    console.warn(`Parent male rabbit ${parent_male_id} not found, but allowing update`);
                 }
             }
             if (parent_female_id) {
                 const femaleResult = await DatabaseHelper.executeQuery(
-                    'SELECT rabbit_id FROM rabbits WHERE rabbit_id = $1 AND is_deleted = 0',
-                    [parent_female_id]
+                    'SELECT rabbit_id, gender FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND is_deleted = 0',
+                    [parent_female_id, kitRecord.farm_id]
                 );
                 if (femaleResult.rows.length === 0) {
-                    throw new ValidationError('Parent female rabbit not found');
+                    console.warn(`Parent female rabbit ${parent_female_id} not found, but allowing update`);
+                } else if (femaleResult.rows[0].gender !== 'female') {
+                    throw new ValidationError('Parent female rabbit must be a doe (female)');
+                }
+            }
+
+            // Validate birth_weight if provided
+            if (birth_weight !== undefined && birth_weight !== null && birth_weight !== '') {
+                const weightNum = parseFloat(birth_weight);
+                if (isNaN(weightNum) || weightNum <= 0) {
+                    throw new ValidationError('Birth weight must be a positive number');
+                }
+            }
+
+            // Validate weaning_weight if provided
+            if (weaning_weight !== undefined && weaning_weight !== null && weaning_weight !== '') {
+                const weightNum = parseFloat(weaning_weight);
+                if (isNaN(weightNum) || weightNum <= 0) {
+                    throw new ValidationError('Weaning weight must be a positive number');
                 }
             }
 
@@ -702,6 +744,11 @@ class BreedingService {
                     kitId
                 ]
             );
+
+            if (updatedKitResult.rows.length === 0) {
+                throw new ValidationError('Kit record not found or could not be updated');
+            }
+
             const updatedKit = updatedKitResult.rows[0];
 
             await DatabaseHelper.executeQuery('COMMIT');

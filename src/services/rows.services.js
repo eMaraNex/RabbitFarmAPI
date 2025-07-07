@@ -82,7 +82,7 @@ class RowsService {
         }
     }
 
-    static async expandRowCapacity(rowId, farmId, additionalCapacity, userId) { 
+    static async expandRowCapacity(name, farmId, additionalCapacity, userId, row_id) {
         if (!additionalCapacity || additionalCapacity < 1) {
             throw new ValidationError('Additional capacity must be at least 1')
         }
@@ -93,7 +93,7 @@ class RowsService {
             // Get current row
             const rowResult = await DatabaseHelper.executeQuery(
                 'SELECT * FROM rows WHERE id = $1 AND farm_id = $2 AND is_deleted = 0',
-                [rowId, farmId]
+                [row_id, farmId]
             )
             if (rowResult.rows.length === 0) {
                 throw new ValidationError('Row not found')
@@ -106,15 +106,15 @@ class RowsService {
             // Update row capacity
             const updatedRowResult = await DatabaseHelper.executeQuery(
                 'UPDATE rows SET capacity = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND farm_id = $3 AND is_deleted = 0 RETURNING *',
-                [newCapacity, rowId, farmId]
+                [newCapacity, row_id, farmId]
             )
 
             await DatabaseHelper.executeQuery('COMMIT')
-            logger.info(`Row ${rowId} (${currentRow.name}) expanded by ${additionalCapacity} hutches to total capacity ${newCapacity} by user ${userId}`)
+            logger.info(`Row ${row_id} (${currentRow.name}) expanded by ${additionalCapacity} hutches to total capacity ${newCapacity} by user ${userId}`)
             return updatedRowResult.rows[0]
         } catch (error) {
             await DatabaseHelper.executeQuery('ROLLBACK')
-            logger.error(`Error expanding row ${rowId}: ${error.message}`)
+            logger.error(`Error expanding row ${row_id}: ${error.message}`)
             throw error
         }
     }
