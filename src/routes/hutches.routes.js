@@ -545,49 +545,4 @@ router.delete('/:farmId/:id', authMiddleware, HutchesController.deleteHutch);
  */
 router.get('/:farmId/:hutchId/history', authMiddleware, HutchesController.getHutchRemovedRabbitHistory);
 
-/**
- * @swagger
- * /api/v1/hutches/{farmId}/row/{rowName}:
- *   get:
- *     summary: Get all hutches in a specific row by row name
- *     tags: [Hutches]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: farmId
- *         schema:
- *           type: string
- *           format: uuid
- *         required: true
- *         description: The ID of the farm
- *       - in: path
- *         name: rowName
- *         schema:
- *           type: string
- *         required: true
- *         description: The name of the row
- *     responses:
- *       200:
- *         description: Hutches retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: Hutches retrieved successfully
- *                 data:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/Hutch'
- *       401:
- *         description: Unauthorized
- */
-router.get('/:farmId/row/:rowName', authMiddleware, HutchesController.getHutchesByRowName);
-
 export default router;
