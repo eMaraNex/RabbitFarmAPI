@@ -28,9 +28,14 @@ const router = express.Router();
  *           type: string
  *           format: uuid
  *           description: The ID of the farm this hutch belongs to
+ *         row_id:
+ *           type: string
+ *           format: uuid
+ *           description: The ID of the row this hutch belongs to (optional for standalone hutches)
+ *           nullable: true
  *         row_name:
  *           type: string
- *           description: The name of the row this hutch belongs to (optional for standalone hutches)
+ *           description: The name of the row this hutch belongs to (read-only, from JOIN)
  *           nullable: true
  *         level:
  *           type: string
@@ -76,7 +81,8 @@ const router = express.Router();
  *       example:
  *         id: Mercury-A1
  *         farm_id: 123e4567-e89b-12d3-a456-426614174000
- *         row_name: null
+ *         row_id: 456e7890-e89b-12d3-a456-426614174001
+ *         row_name: Mercury
  *         level: A
  *         position: 1
  *         size: medium
@@ -96,18 +102,80 @@ const router = express.Router();
 
 /**
  * @swagger
- * /api/v1/hutches:
+ * /api/v1/hutches/{farmId}:
  *   post:
  *     summary: Create a new hutch
  *     tags: [Hutches]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: farmId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         required: true
+ *         description: The ID of the farm
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/Hutch'
+ *             type: object
+ *             required:
+ *               - id
+ *               - level
+ *               - position
+ *               - size
+ *               - material
+ *             properties:
+ *               id:
+ *                 type: string
+ *                 description: The unique ID of the hutch
+ *               row_id:
+ *                 type: string
+ *                 format: uuid
+ *                 description: The ID of the row (optional)
+ *                 nullable: true
+ *               level:
+ *                 type: string
+ *                 enum: [A, B, C]
+ *                 description: The level of the hutch
+ *               position:
+ *                 type: integer
+ *                 description: The position of the hutch
+ *               size:
+ *                 type: string
+ *                 enum: [small, medium, large]
+ *                 description: The size of the hutch
+ *               material:
+ *                 type: string
+ *                 enum: [wire, wood, plastic]
+ *                 description: The material of the hutch
+ *               features:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: List of features
+ *                 nullable: true
+ *               is_occupied:
+ *                 type: boolean
+ *                 description: Whether the hutch is occupied
+ *               last_cleaned:
+ *                 type: string
+ *                 format: date-time
+ *                 description: The last cleaning timestamp
+ *                 nullable: true
+ *             example:
+ *               id: Mercury-A1
+ *               row_id: 456e7890-e89b-12d3-a456-426614174001
+ *               level: A
+ *               position: 1
+ *               size: medium
+ *               material: wire
+ *               features: ["water bottle", "feeder"]
+ *               is_occupied: false
+ *               last_cleaned: null
  *     responses:
  *       201:
  *         description: Hutch created successfully
@@ -131,7 +199,9 @@ const router = express.Router();
  *       401:
  *         description: Unauthorized
  */
-router.post('/:farmId', authMiddleware, validateRequest(hutchSchema), HutchesController.createHutch);
+// router.post('/:farmId', authMiddleware, validateRequest(hutchSchema), HutchesController.createHutch);
+router.post('/:farmId', authMiddleware, HutchesController.createHutch);
+
 
 /**
  * @swagger
@@ -154,7 +224,7 @@ router.post('/:farmId', authMiddleware, validateRequest(hutchSchema), HutchesCon
  *         schema:
  *           type: string
  *         required: true
- *         description: The hutch ID (e.g., Standalone-H1)
+ *         description: The hutch ID (e.g., Mercury-A1)
  *     responses:
  *       200:
  *         description: Hutch retrieved successfully
@@ -194,6 +264,12 @@ router.get('/:farmId/:id', authMiddleware, HutchesController.getHutch);
  *           format: uuid
  *         required: true
  *         description: The ID of the farm
+ *       - in: query
+ *         name: rowId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by row ID
  *       - in: query
  *         name: rowName
  *         schema:
@@ -258,7 +334,7 @@ router.get('/:farmId', authMiddleware, HutchesController.getAllHutches);
  *         schema:
  *           type: string
  *         required: true
- *         description: The hutch ID (e.g., Standalone-H1)
+ *         description: The hutch ID (e.g., Mercury-A1)
  *     requestBody:
  *       required: true
  *       content:
@@ -266,9 +342,10 @@ router.get('/:farmId', authMiddleware, HutchesController.getAllHutches);
  *           schema:
  *             type: object
  *             properties:
- *               row_name:
+ *               row_id:
  *                 type: string
- *                 description: The name of the row (optional)
+ *                 format: uuid
+ *                 description: The ID of the row (optional)
  *                 nullable: true
  *               level:
  *                 type: string
@@ -300,7 +377,7 @@ router.get('/:farmId', authMiddleware, HutchesController.getAllHutches);
  *                 description: The last cleaning timestamp
  *                 nullable: true
  *             example:
- *               row_name: null
+ *               row_id: 456e7890-e89b-12d3-a456-426614174001
  *               level: A
  *               position: 1
  *               size: medium
@@ -354,7 +431,7 @@ router.put('/:farmId/:id', authMiddleware, validateRequest(hutchUpdateSchema), H
  *         schema:
  *           type: string
  *         required: true
- *         description: The hutch ID (e.g., Standalone-H1)
+ *         description: The hutch ID (e.g., Mercury-A1)
  *     responses:
  *       200:
  *         description: Hutch soft deleted successfully
@@ -399,7 +476,7 @@ router.delete('/:farmId/:id', authMiddleware, HutchesController.deleteHutch);
  *         schema:
  *           type: string
  *         required: true
- *         description: The hutch ID (e.g., Standalone-H1)
+ *         description: The hutch ID (e.g., Mercury-A1)
  *     responses:
  *       200:
  *         description: Hutch rabbit history retrieved successfully
@@ -417,7 +494,39 @@ router.delete('/:farmId/:id', authMiddleware, HutchesController.deleteHutch);
  *                 data:
  *                   type: array
  *                   items:
- *                     $ref: '#/components/schemas/HutchRabbitHistory'
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       hutch_id:
+ *                         type: string
+ *                       rabbit_id:
+ *                         type: string
+ *                       rabbit_name:
+ *                         type: string
+ *                       farm_id:
+ *                         type: string
+ *                         format: uuid
+ *                       assigned_at:
+ *                         type: string
+ *                         format: date-time
+ *                       removed_at:
+ *                         type: string
+ *                         format: date-time
+ *                       removal_reason:
+ *                         type: string
+ *                       removal_notes:
+ *                         type: string
+ *                       sale_amount:
+ *                         type: number
+ *                       sale_date:
+ *                         type: string
+ *                         format: date
+ *                       sale_weight:
+ *                         type: number
+ *                       sold_to:
+ *                         type: string
  *       404:
  *         description: Hutch not found
  *         content:
@@ -435,5 +544,50 @@ router.delete('/:farmId/:id', authMiddleware, HutchesController.deleteHutch);
  *         description: Unauthorized
  */
 router.get('/:farmId/:hutchId/history', authMiddleware, HutchesController.getHutchRemovedRabbitHistory);
+
+/**
+ * @swagger
+ * /api/v1/hutches/{farmId}/row/{rowName}:
+ *   get:
+ *     summary: Get all hutches in a specific row by row name
+ *     tags: [Hutches]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: farmId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         required: true
+ *         description: The ID of the farm
+ *       - in: path
+ *         name: rowName
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: The name of the row
+ *     responses:
+ *       200:
+ *         description: Hutches retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Hutches retrieved successfully
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Hutch'
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/:farmId/row/:rowName', authMiddleware, HutchesController.getHutchesByRowName);
 
 export default router;

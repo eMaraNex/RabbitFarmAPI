@@ -18,20 +18,13 @@ class HutchesService {
         try {
             await DatabaseHelper.executeQuery('BEGIN');
 
-            if (row_id) {
-                const rowResult = await DatabaseHelper.executeQuery(
-                    'SELECT levels FROM rows WHERE id = $1 AND farm_id = $2 AND is_deleted = 0',
-                    [row_id, farm_id]
-                );
-                if (rowResult.rows.length === 0) {
-                    throw new ValidationError('Row not found');
-                }
-                const rowLevels = rowResult.rows[0].levels || ['A', 'B', 'C'];
-                if (!rowLevels.includes(level)) {
-                    throw new ValidationError(`Level must be one of ${rowLevels.join(', ')}`);
-                }
+            const farmResult = await DatabaseHelper.executeQuery(
+                'SELECT id FROM farms WHERE id = $1 AND is_deleted = 0',
+                [farm_id]
+            );
+            if (farmResult.rows.length === 0) {
+                throw new ValidationError('Farm not found');
             }
-
             const existingHutch = await DatabaseHelper.executeQuery(
                 'SELECT 1 FROM hutches WHERE id = $1 AND farm_id = $2 AND is_deleted = 0',
                 [id, farm_id]
@@ -40,34 +33,55 @@ class HutchesService {
                 throw new ValidationError('Hutch ID already exists');
             }
 
-            const rowHutches = await DatabaseHelper.executeQuery(
-                'SELECT COUNT(*) FROM hutches WHERE row_id = $1 AND farm_id = $2 AND is_deleted = 0',
-                [row_id, farm_id]
-            );
-            const rowResult = await DatabaseHelper.executeQuery(
-                'SELECT capacity FROM rows WHERE id = $1 AND farm_id = $2 AND is_deleted = 0',
-                [row_id, farm_id]
-            );
-            if (rowResult.rows.length > 0 && parseInt(rowHutches.rows[0].count) >= rowResult.rows[0].capacity) {
-                throw new ValidationError('Row capacity reached. Please expand row capacity.');
-            }
+            if (row_id) {
+                const rowResult = await DatabaseHelper.executeQuery(
+                    'SELECT levels, capacity FROM rows WHERE id = $1 AND farm_id = $2 AND is_deleted = 0',
+                    [row_id, farm_id]
+                );
+                if (rowResult.rows.length === 0) {
+                    throw new ValidationError('Row not found');
+                }
 
+                const row = rowResult.rows[0];
+                const rowLevels = row.levels || ['A', 'B', 'C'];
+                if (!rowLevels.includes(level)) {
+                    throw new ValidationError(`Level must be one of ${rowLevels.join(', ')}`);
+                }
+                const rowHutchesResult = await DatabaseHelper.executeQuery(
+                    'SELECT COUNT(*) FROM hutches WHERE row_id = $1 AND farm_id = $2 AND is_deleted = 0',
+                    [row_id, farm_id]
+                );
+                const currentHutchCount = parseInt(rowHutchesResult.rows[0].count);
+                if (currentHutchCount >= row.capacity) {
+                    throw new ValidationError('Row capacity reached. Please expand row capacity.');
+                }
+
+                const duplicateResult = await DatabaseHelper.executeQuery(
+                    'SELECT 1 FROM hutches WHERE row_id = $1 AND level = $2 AND position = $3 AND farm_id = $4 AND is_deleted = 0',
+                    [row_id, level, position, farm_id]
+                );
+                if (duplicateResult.rows.length > 0) {
+                    throw new ValidationError(`Position ${position} at level ${level} is already occupied in this row`);
+                }
+            }
+            const insertValues = [
+                id,
+                farm_id,
+                row_id ? row_id : null,
+                level,
+                position,
+                size,
+                material,
+                JSON.stringify(features || ['water bottle', 'feeder']),
+                is_occupied,
+                last_cleaned ? last_cleaned : null,
+                is_deleted
+            ];
             const result = await DatabaseHelper.executeQuery(
                 `INSERT INTO hutches (id, farm_id, row_id, level, position, size, material, features, is_occupied, last_cleaned, created_at, updated_at, is_deleted)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $11) RETURNING *`,
-                [
-                    id,
-                    farm_id,
-                    row_id || null,
-                    level,
-                    position,
-                    size,
-                    material,
-                    JSON.stringify(features || ['water bottle', 'feeder']),
-                    is_occupied,
-                    last_cleaned || null,
-                    is_deleted
-                ]
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $11) 
+                 RETURNING *`,
+                insertValues
             );
 
             await DatabaseHelper.executeQuery('COMMIT');
@@ -88,14 +102,19 @@ class HutchesService {
                     JSON_BUILD_OBJECT(
                         'rabbit_id', r2.rabbit_id,
                         'rabbit_name', r2.name,
-                        'hutch_id', r2.hutch_id
+                        'hutch_id', r2.hutch_id,
+                        'gender', r2.gender,
+                        'breed', r2.breed,
+                        'color', r2.color,
+                        'weight', r2.weight,
+                        'is_pregnant', r2.is_pregnant
                     )
                 )
                 FROM rabbits r2
                 WHERE r2.hutch_id = h.id AND r2.farm_id = $2 AND r2.is_deleted = 0) AS rabbits
-         FROM hutches h
-         LEFT JOIN rows r ON h.row_id = r.id
-         WHERE h.id = $1 AND h.farm_id = $2 AND h.is_deleted = 0`,
+                FROM hutches h
+                LEFT JOIN rows r ON h.row_id = r.id
+                WHERE h.id = $1 AND h.farm_id = $2 AND h.is_deleted = 0`,
                 [id, farmId]
             );
             if (result.rows.length === 0) {

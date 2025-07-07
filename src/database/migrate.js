@@ -61,18 +61,20 @@ const migrations = [
         currency VARCHAR(3) DEFAULT 'USD',
         settings JSONB DEFAULT '{}',
         is_active INTEGER DEFAULT 0 CHECK (is_active IN (0, 1)),
-        created_by UUID NOT NULL,
+        created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT fk_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE,
-        CONSTRAINT unique_farm_name_per_user UNIQUE (name, created_by)
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
 
-      -- Ensure users table has farm_id column
-      ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS farm_id UUID,
-        ADD CONSTRAINT fk_farm_id FOREIGN KEY (farm_id) REFERENCES farms(id) ON DELETE SET NULL;
+      -- Add farm_id to users table
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'farm_id') THEN
+          ALTER TABLE users ADD COLUMN farm_id UUID REFERENCES farms(id) ON DELETE SET NULL;
+        END IF;
+      END $$;
+
       -- Create password_resets table
       CREATE TABLE IF NOT EXISTS password_resets (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -98,11 +100,11 @@ const migrations = [
       CREATE TABLE IF NOT EXISTS rows (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         name VARCHAR(50) NOT NULL UNIQUE,
-        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
+        farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
         description TEXT,
         levels TEXT[] NOT NULL DEFAULT ARRAY['A', 'B', 'C']::TEXT[],
-        capacity INTEGER NOT NULL DEFAULT 18,
-        occupied INTEGER DEFAULT 0 CHECK (occupied <= capacity),
+        capacity INTEGER NOT NULL DEFAULT 18 CHECK (capacity BETWEEN 1 AND 200),
+        occupied INTEGER DEFAULT 0 CHECK (occupied >= 0 AND occupied <= capacity),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -112,9 +114,9 @@ const migrations = [
       CREATE TABLE IF NOT EXISTS hutches (
         id VARCHAR(50) PRIMARY KEY,
         row_id UUID REFERENCES rows(id) ON DELETE CASCADE,
-        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
-        level VARCHAR(1) CHECK (level IN ('A', 'B', 'C')) NOT NULL,
-        position INTEGER NOT NULL CHECK (position BETWEEN 1 AND 6),
+        farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
+        level VARCHAR(1) NOT NULL CHECK (level IN ('A', 'B', 'C')),
+        position INTEGER NOT NULL CHECK (position BETWEEN 1 AND 50),
         size VARCHAR(20) NOT NULL DEFAULT 'medium',
         material VARCHAR(20) NOT NULL DEFAULT 'wire',
         features JSONB DEFAULT '["water bottle", "feeder"]',
@@ -129,26 +131,26 @@ const migrations = [
       -- Create rabbits table
       CREATE TABLE IF NOT EXISTS rabbits (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
+        farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
         rabbit_id VARCHAR(200) NOT NULL UNIQUE,
         name VARCHAR(50),
         gender VARCHAR(6) NOT NULL CHECK (gender IN ('male', 'female')),
         breed VARCHAR(50) NOT NULL,
         color VARCHAR(50) NOT NULL,
         birth_date DATE NOT NULL,
-        weight DECIMAL(5,2) NOT NULL,
+        weight DECIMAL(5,2) NOT NULL CHECK (weight > 0),
         hutch_id VARCHAR(50) REFERENCES hutches(id),
         parent_male_id VARCHAR(200) REFERENCES rabbits(rabbit_id),
         parent_female_id VARCHAR(200) REFERENCES rabbits(rabbit_id),
         acquisition_type VARCHAR(20) DEFAULT 'birth',
         acquisition_date DATE,
-        acquisition_cost DECIMAL(10,2),
+        acquisition_cost DECIMAL(10,2) CHECK (acquisition_cost >= 0),
         is_pregnant BOOLEAN DEFAULT false,
         pregnancy_start_date DATE,
         expected_birth_date DATE,
         actual_birth_date DATE,
-        total_litters INTEGER DEFAULT 0,
-        total_kits INTEGER DEFAULT 0,
+        total_litters INTEGER DEFAULT 0 CHECK (total_litters >= 0),
+        total_kits INTEGER DEFAULT 0 CHECK (total_kits >= 0),
         status VARCHAR(20) DEFAULT 'active',
         notes TEXT,
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
@@ -161,14 +163,14 @@ const migrations = [
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         hutch_id VARCHAR(50) REFERENCES hutches(id) ON DELETE CASCADE,
         rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
-        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
+        farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
         assigned_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
         removed_at TIMESTAMP WITH TIME ZONE,
         removal_reason VARCHAR(100),
         removal_notes TEXT,
-        sale_amount DECIMAL(10,2),
+        sale_amount DECIMAL(10,2) CHECK (sale_amount >= 0),
         sale_date DATE,
-        sale_weight DECIMAL(5,2),
+        sale_weight DECIMAL(5,2) CHECK (sale_weight > 0),
         sold_to VARCHAR(100),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -194,13 +196,13 @@ const migrations = [
       -- Create breeding_records table
       CREATE TABLE IF NOT EXISTS breeding_records (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
-        doe_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
-        buck_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
+        doe_id VARCHAR(200) NOT NULL REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        buck_id VARCHAR(200) NOT NULL REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         mating_date DATE NOT NULL,
         expected_birth_date DATE,
         actual_birth_date DATE,
-        number_of_kits INTEGER,
+        number_of_kits INTEGER CHECK (number_of_kits >= 0),
         notes TEXT,
         alert_date DATE,
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
@@ -211,15 +213,15 @@ const migrations = [
       -- Create kit_records table
       CREATE TABLE IF NOT EXISTS kit_records (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        breeding_record_id UUID REFERENCES breeding_records(id) ON DELETE CASCADE,
-        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
+        breeding_record_id UUID NOT NULL REFERENCES breeding_records(id) ON DELETE CASCADE,
+        farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
         kit_number VARCHAR(50) NOT NULL,
-        birth_weight DECIMAL(5,2),
+        birth_weight DECIMAL(5,2) CHECK (birth_weight > 0),
         gender VARCHAR(6) CHECK (gender IN ('male', 'female')),
         color VARCHAR(50),
         status VARCHAR(20) DEFAULT 'alive',
         weaning_date DATE,
-        weaning_weight DECIMAL(5,2),
+        weaning_weight DECIMAL(5,2) CHECK (weaning_weight > 0),
         parent_male_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         parent_female_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         notes TEXT,
@@ -231,9 +233,9 @@ const migrations = [
       -- Create breeding_calendar table
       CREATE TABLE IF NOT EXISTS breeding_calendar (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
-        doe_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
-        buck_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
+        doe_id VARCHAR(200) NOT NULL REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        buck_id VARCHAR(200) NOT NULL REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         planned_date DATE NOT NULL,
         status VARCHAR(20) DEFAULT 'planned',
         notes TEXT,
@@ -255,8 +257,8 @@ const migrations = [
       -- Create health_records table
       CREATE TABLE IF NOT EXISTS health_records (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
-        type VARCHAR(20) NOT NULL,
+        rabbit_id VARCHAR(200) NOT NUL REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        type VARCHAR(20) NOT NULL CHECK (type IN ('vaccination', 'treatment', 'checkup', 'medication', 'surgery', 'other')),
         description TEXT NOT NULL,
         date DATE NOT NULL,
         next_due DATE,
@@ -271,7 +273,7 @@ const migrations = [
       -- Create health_alerts table
       CREATE TABLE IF NOT EXISTS health_alerts (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
+        farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
         rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         alert_type VARCHAR(50) NOT NULL,
         severity VARCHAR(20) DEFAULT 'medium',
@@ -288,11 +290,11 @@ const migrations = [
       -- Create vaccination_schedules table
       CREATE TABLE IF NOT EXISTS vaccination_schedules (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
+        farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
         vaccine_name VARCHAR(100) NOT NULL,
         description TEXT,
-        frequency_days INTEGER NOT NULL,
-        age_start_days INTEGER DEFAULT 0,
+        frequency_days INTEGER NOT NULL CHECK (frequency_days > 0),
+        age_start_days INTEGER DEFAULT 0 CHECK (age_start_days >= 0),
         is_active INTEGER DEFAULT 0 CHECK (is_active IN (0, 1)),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -312,7 +314,7 @@ const migrations = [
       -- Create feeding_schedules table
       CREATE TABLE IF NOT EXISTS feeding_schedules (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        rabbit_id VARCHAR(200) NOT NULL REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         daily_amount VARCHAR(50) NOT NULL,
         feed_type VARCHAR(50) NOT NULL,
         times JSONB NOT NULL,
@@ -329,7 +331,7 @@ const migrations = [
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         hutch_id VARCHAR(50) REFERENCES hutches(id),
-        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
+        farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
         feed_type VARCHAR(50) NOT NULL,
         amount VARCHAR(50) NOT NULL,
         unit VARCHAR(20) DEFAULT 'grams',
@@ -343,12 +345,12 @@ const migrations = [
       -- Create feed_inventory table
       CREATE TABLE IF NOT EXISTS feed_inventory (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
+        farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
         feed_type VARCHAR(50) NOT NULL,
         brand VARCHAR(50),
-        quantity DECIMAL(10,2) NOT NULL,
+        quantity DECIMAL(10,2) NOT NULL CHECK (quantity >= 0),
         unit VARCHAR(20) NOT NULL,
-        cost_per_unit DECIMAL(10,2),
+        cost_per_unit DECIMAL(10,2) CHECK (cost_per_unit >= 0),
         purchase_date DATE,
         expiry_date DATE,
         supplier VARCHAR(100),
@@ -371,14 +373,14 @@ const migrations = [
       -- Create earnings_records table
       CREATE TABLE IF NOT EXISTS earnings_records (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
+        farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
         type VARCHAR(20) NOT NULL,
         rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id),
-        amount DECIMAL(12,2) NOT NULL,
+        amount DECIMAL(12,2) NOT NULL CHECK (amount >= 0),
         currency VARCHAR(3) DEFAULT 'USD',
         date DATE NOT NULL,
-        weight DECIMAL(8,2),
-        sale_type VARCHAR(20),
+        weight DECIMAL(8,2) CHECK (weight > 0),
+        sale_type VARCHAR(20) NOT NULL,
         includes_urine BOOLEAN DEFAULT false,
         includes_manure BOOLEAN DEFAULT false,
         buyer_name VARCHAR(100),
@@ -392,9 +394,9 @@ const migrations = [
       -- Create production_records table
       CREATE TABLE IF NOT EXISTS production_records (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
+        farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
         type VARCHAR(20) NOT NULL,
-        quantity DECIMAL(10,2) NOT NULL,
+        quantity DECIMAL(10,2) NOT NULL CHECK (quantity >= 0),
         unit VARCHAR(20) NOT NULL,
         date DATE NOT NULL,
         source VARCHAR(50),
@@ -407,14 +409,14 @@ const migrations = [
       -- Create removal_records table
       CREATE TABLE IF NOT EXISTS removal_records (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        rabbit_id VARCHAR(200) NOT NULL REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         hutch_id VARCHAR(50) REFERENCES hutches(id),
-        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
-        reason VARCHAR(100) NOT NULL,
+        farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
+        reason VARCHAR(100) NOT NULL CHECK (reason IN ('sale', 'death', 'transfer', 'breeding', 'other')),
         notes TEXT,
         date DATE NOT NULL,
-        sale_amount DECIMAL(10,2),
-        sale_weight DECIMAL(5,2),
+        sale_amount DECIMAL(10,2) CHECK (sale_amount >= 0),
+        sale_weight DECIMAL(5,2) CHECK (sale_weight > 0),
         sold_to VARCHAR(100),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -423,10 +425,10 @@ const migrations = [
       -- Create expenses table
       CREATE TABLE IF NOT EXISTS expenses (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
+        farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
         category VARCHAR(50) NOT NULL,
         description TEXT NOT NULL,
-        amount DECIMAL(12,2) NOT NULL,
+        amount DECIMAL(12,2) NOT NULL CHECK (amount >= 0),
         currency VARCHAR(3) DEFAULT 'USD',
         date DATE NOT NULL,
         vendor VARCHAR(100),
@@ -454,7 +456,7 @@ const migrations = [
       -- Create notifications table
       CREATE TABLE IF NOT EXISTS notifications (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         type VARCHAR(50) NOT NULL,
         title VARCHAR(200) NOT NULL,
         message TEXT NOT NULL,
@@ -503,7 +505,7 @@ const migrations = [
         filename VARCHAR(255) NOT NULL,
         original_name VARCHAR(255) NOT NULL,
         mime_type VARCHAR(100) NOT NULL,
-        size INTEGER NOT NULL,
+        size INTEGER NOT NULL CHECK (size > 0),
         path VARCHAR(500) NOT NULL,
         entity_type VARCHAR(50),
         entity_id VARCHAR(50),
@@ -523,9 +525,24 @@ const migrations = [
     version: 7,
     name: 'create_indexes_and_triggers',
     up: `
-      -- Create indexes for better performance
+      -- Create unique indexes for rows (name + farm_id combination)
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_rows_name_farm_unique 
+      ON rows (name, farm_id) 
+      WHERE is_deleted = 0;
+
+      -- Create unique indexes for hutches (proper handling of row_id nulls)
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_hutches_row_level_position 
+      ON hutches (row_id, level, position) 
+      WHERE row_id IS NOT NULL AND is_deleted = 0;
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_hutches_standalone_farm_level_position 
+      ON hutches (farm_id, level, position) 
+      WHERE row_id IS NULL AND is_deleted = 0;
+
+      -- Create performance indexes
       CREATE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_users_farm_id ON users(farm_id) WHERE is_deleted = 0;
+      CREATE INDEX IF NOT EXISTS idx_farms_created_by ON farms(created_by) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_rabbits_farm_id ON rabbits(farm_id) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_rabbits_rabbit_id ON rabbits(rabbit_id) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_rabbits_hutch_id ON rabbits(hutch_id) WHERE is_deleted = 0;
@@ -568,17 +585,36 @@ const migrations = [
       CREATE OR REPLACE FUNCTION update_row_occupied()
       RETURNS TRIGGER AS $$
       BEGIN
-        UPDATE rows
-        SET occupied = (
-          SELECT COUNT(*)
-          FROM hutches
-          WHERE row_id = NEW.row_id
-          AND is_occupied = true
-          AND is_deleted = 0
-        )
-        WHERE id = NEW.row_id
-        AND is_deleted = 0;
-        RETURN NEW;
+        IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+          IF NEW.row_id IS NOT NULL THEN
+            UPDATE rows
+            SET occupied = (
+              SELECT COUNT(*)
+              FROM hutches
+              WHERE row_id = NEW.row_id
+              AND is_occupied = true
+              AND is_deleted = 0
+            )
+            WHERE id = NEW.row_id
+            AND is_deleted = 0;
+          END IF;
+          RETURN NEW;
+        ELSIF TG_OP = 'DELETE' THEN
+          IF OLD.row_id IS NOT NULL THEN
+            UPDATE rows
+            SET occupied = (
+              SELECT COUNT(*)
+              FROM hutches
+              WHERE row_id = OLD.row_id
+              AND is_occupied = true
+              AND is_deleted = 0
+            )
+            WHERE id = OLD.row_id
+            AND is_deleted = 0;
+          END IF;
+          RETURN OLD;
+        END IF;
+        RETURN NULL;
       END;
       $$ language 'plpgsql';
 
@@ -595,10 +631,15 @@ const migrations = [
       CREATE TRIGGER update_feeding_schedules_updated_at BEFORE UPDATE ON feeding_schedules FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
       CREATE TRIGGER update_earnings_records_updated_at BEFORE UPDATE ON earnings_records FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
       CREATE TRIGGER update_production_records_updated_at BEFORE UPDATE ON production_records FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+      CREATE TRIGGER update_system_settings_updated_at BEFORE UPDATE ON system_settings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+      CREATE TRIGGER update_feed_inventory_updated_at BEFORE UPDATE ON feed_inventory FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+      CREATE TRIGGER update_expenses_updated_at BEFORE UPDATE ON expenses FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+      CREATE TRIGGER update_vaccination_schedules_updated_at BEFORE UPDATE ON vaccination_schedules FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+      CREATE TRIGGER update_health_alerts_updated_at BEFORE UPDATE ON health_alerts FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-      -- Create trigger for rows.occupied
+      -- Create trigger for rows.occupied (handles INSERT/UPDATE/DELETE)
       CREATE TRIGGER update_hutches_occupied
-      AFTER INSERT OR UPDATE OF is_occupied, is_deleted
+      AFTER INSERT OR UPDATE OF is_occupied, is_deleted, row_id OR DELETE
       ON hutches
       FOR EACH ROW
       EXECUTE FUNCTION update_row_occupied();
@@ -617,6 +658,11 @@ const migrations = [
       DROP TRIGGER IF EXISTS update_feeding_schedules_updated_at ON feeding_schedules;
       DROP TRIGGER IF EXISTS update_earnings_records_updated_at ON earnings_records;
       DROP TRIGGER IF EXISTS update_production_records_updated_at ON production_records;
+      DROP TRIGGER IF EXISTS update_system_settings_updated_at ON system_settings;
+      DROP TRIGGER IF EXISTS update_feed_inventory_updated_at ON feed_inventory;
+      DROP TRIGGER IF EXISTS update_expenses_updated_at ON expenses;
+      DROP TRIGGER IF EXISTS update_vaccination_schedules_updated_at ON vaccination_schedules;
+      DROP TRIGGER IF EXISTS update_health_alerts_updated_at ON health_alerts;
       DROP TRIGGER IF EXISTS update_hutches_occupied ON hutches;
 
       -- Drop functions
@@ -624,8 +670,12 @@ const migrations = [
       DROP FUNCTION IF EXISTS update_row_occupied;
 
       -- Drop indexes
+      DROP INDEX IF EXISTS idx_rows_name_farm_unique;
+      DROP INDEX IF EXISTS idx_hutches_row_level_position;
+      DROP INDEX IF EXISTS idx_hutches_standalone_farm_level_position;
       DROP INDEX IF EXISTS idx_users_email;
       DROP INDEX IF EXISTS idx_users_farm_id;
+      DROP INDEX IF EXISTS idx_farms_created_by;
       DROP INDEX IF EXISTS idx_rabbits_farm_id;
       DROP INDEX IF EXISTS idx_rabbits_rabbit_id;
       DROP INDEX IF EXISTS idx_rabbits_hutch_id;
@@ -663,8 +713,8 @@ const migrations = [
       -- Create rabbit_birth_history table
       CREATE TABLE IF NOT EXISTS rabbit_birth_history (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
-        doe_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
+        doe_id VARCHAR(200) NOT NULL REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         breeding_record_id UUID REFERENCES breeding_records(id) ON DELETE SET NULL,
         birth_date DATE NOT NULL,
         number_of_kits INTEGER NOT NULL CHECK (number_of_kits >= 0),
@@ -757,7 +807,7 @@ const migrations = [
         severity VARCHAR(20) NOT NULL CHECK (severity IN ('low', 'medium', 'high')),
         message TEXT NOT NULL,
         status VARCHAR(20) NOT NULL CHECK (status IN ('pending', 'sent', 'completed', 'rejected')),
-        farm_id UUID REFERENCES farms(id) ON DELETE CASCADE,
+        farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
         user_id UUID REFERENCES users(id) ON DELETE SET NULL,
         rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE SET NULL,
         hutch_id VARCHAR(50) REFERENCES hutches(id) ON DELETE SET NULL,

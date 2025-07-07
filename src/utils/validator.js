@@ -43,6 +43,8 @@ export const rowExpandSchema = Joi.object({
     name: Joi.string().trim().required(),
     farm_id: Joi.string().uuid().required(),
     additionalCapacity: Joi.number().integer().min(1).required(),
+    capacity: Joi.number().integer().min(1),
+    levels: Joi.array().items(Joi.string()).min(1),
 });
 
 export const rabbitSchema = Joi.object({
