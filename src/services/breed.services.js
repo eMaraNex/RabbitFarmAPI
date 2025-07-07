@@ -222,7 +222,7 @@ class BreedingService {
             if (result.rows.length === 0) {
                 throw new ValidationError('Breeding record not found');
             }
-            return result.rows[0];
+            return result.rows;
         } catch (error) {
             logger.error(`Error fetching breeding record ${recordId}: ${error.message}`);
             throw error;
