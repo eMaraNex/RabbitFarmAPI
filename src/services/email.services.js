@@ -2,12 +2,8 @@ import dotenv from 'dotenv';
 dotenv.config();
 import nodemailer from 'nodemailer';
 import fs from 'fs/promises';
-import path from 'path';
 import os from 'os';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { DatabaseHelper } from '../config/database.js';
 
 /**
  * Email Service using Nodemailer with rate limiting
@@ -19,7 +15,6 @@ class EmailService {
             user: process.env.SMTP_USER,
             defaultSender: process.env.DEFAULT_SENDER_EMAIL,
             dailyLimit: dailyLimit || 500,
-            counterFilePath: path.join(__dirname, 'email-counter.json'),
             ...config
         };
 
@@ -39,25 +34,22 @@ class EmailService {
     }
 
     /**
-     * Initialize the service with persistent counter data
+     * Initialize the service with email count from database
      */
     async initialize() {
         try {
-            // Load counter data
-            const counterExists = await this.fileExists(this.config.counterFilePath);
-            if (counterExists) {
-                const counterData = JSON.parse(await fs.readFile(this.config.counterFilePath, 'utf8'));
-                if (this.isSameDay(new Date(), new Date(counterData.date))) {
-                    this.emailsSentToday = counterData.count;
-                } else {
-                    // Reset counter for new day
-                    await this.resetDailyCounter();
-                }
-            } else {
-                await this.resetDailyCounter();
-            }
+            await DatabaseHelper.executeQuery('BEGIN');
+            const today = new Date().toISOString().split('T')[0];
+            const result = await DatabaseHelper.executeQuery(`
+                SELECT COUNT(*) as count
+                FROM email_logs
+                WHERE date = $1
+                AND is_deleted = 0
+            `, [today]);
 
+            this.emailsSentToday = parseInt(result.rows[0].count, 10) || 0;
             this.logger.info(`Email service initialized. Emails sent today: ${this.emailsSentToday}`);
+            await DatabaseHelper.executeQuery('BEGIN');
         } catch (error) {
             this.logger.error(`Initialization error: ${error.message}`);
             throw error;
@@ -65,40 +57,23 @@ class EmailService {
     }
 
     /**
-     * Check if file exists
+     * Log email send to database
      */
-    async fileExists(filePath) {
+    async logEmailSend(user_id, farm_id) {
         try {
-            await fs.access(filePath);
-            return true;
-        } catch {
-            return false;
+            const today = new Date().toISOString().split('T')[0];
+            await DatabaseHelper.executeQuery(`
+                INSERT INTO email_logs (
+                    id, user_id, farm_id, count, date, is_active, is_deleted, created_at, updated_at
+                ) VALUES (
+                    uuid_generate_v4(), $1, $2, 1, $3, 1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+            `, [user_id || null, farm_id || null, today]);
+            this.emailsSentToday++;
+        } catch (error) {
+            this.logger.error(`Error logging email send: ${error.message}`);
+            throw error;
         }
-    }
-
-    /**
-     * Reset daily email counter
-     */
-    async resetDailyCounter() {
-        this.emailsSentToday = 0;
-        await fs.writeFile(
-            this.config.counterFilePath,
-            JSON.stringify({ count: 0, date: new Date() }),
-            'utf8'
-        );
-        this.logger.info('Daily email counter reset');
-    }
-
-    /**
-     * Update counter in memory and persistent storage
-     */
-    async updateCounter() {
-        this.emailsSentToday++;
-        await fs.writeFile(
-            this.config.counterFilePath,
-            JSON.stringify({ count: this.emailsSentToday, date: new Date() }),
-            'utf8'
-        );
     }
 
     /**
@@ -219,7 +194,7 @@ class EmailService {
 
             const message = await this.createMessage(options, type);
             await this.transporter.sendMail(message);
-            await this.updateCounter();
+            await this.logEmailSend(options.user_id, options.farm_id);
 
             this.logger.info(`Email sent to ${message.to}. Daily count: ${this.emailsSentToday}/${this.config.dailyLimit}`);
             return { success: true, status: 'sent', message: 'Email sent successfully' };
@@ -230,14 +205,40 @@ class EmailService {
     }
 
     /**
-     * Get current status
+     * Get current status, optionally filtered by user_id and farm_id
      */
-    getStatus() {
-        return {
-            emailsSentToday: this.emailsSentToday,
-            dailyLimit: this.config.dailyLimit,
-            remainingQuota: this.config.dailyLimit - this.emailsSentToday
-        };
+    async getStatus(user_id, farm_id) {
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            let query = `
+                SELECT COUNT(*) as count
+                FROM email_logs
+                WHERE date = $1
+                AND is_deleted = 0
+            `;
+            const params = [today];
+
+            if (user_id) {
+                query += ` AND user_id = $${params.length + 1}`;
+                params.push(user_id);
+            }
+            if (farm_id) {
+                query += ` AND farm_id = $${params.length + 1}`;
+                params.push(farm_id);
+            }
+
+            const result = await DatabaseHelper.executeQuery(query, params);
+            const count = parseInt(result.rows[0].count, 10) || 0;
+
+            return {
+                emailsSentToday: count,
+                dailyLimit: this.config.dailyLimit,
+                remainingQuota: this.config.dailyLimit - count
+            };
+        } catch (error) {
+            this.logger.error(`Error getting email status: ${error.message}`);
+            throw error;
+        }
     }
 }
 
