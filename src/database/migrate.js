@@ -257,7 +257,7 @@ const migrations = [
       -- Create health_records table
       CREATE TABLE IF NOT EXISTS health_records (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        rabbit_id VARCHAR(200) NOT NUL REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
+        rabbit_id VARCHAR(200) NOT NULL REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         type VARCHAR(20) NOT NULL CHECK (type IN ('vaccination', 'treatment', 'checkup', 'medication', 'surgery', 'other')),
         description TEXT NOT NULL,
         date DATE NOT NULL,
@@ -847,6 +847,49 @@ const migrations = [
 
       -- Drop function
       DROP FUNCTION IF EXISTS update_updated_on_column;
+    `
+  },
+  {
+    version: 10,
+    name: 'create_email_logs_table',
+    up: `
+      -- Create email_logs table
+      CREATE TABLE IF NOT EXISTS email_logs (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        farm_id UUID REFERENCES farms(id) ON DELETE SET NULL,
+        count INTEGER NOT NULL CHECK (count = 1),
+        date DATE NOT NULL,
+        is_active INTEGER DEFAULT 0 CHECK (is_active IN (0, 1)),
+        is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- Create indexes for email_logs
+      CREATE INDEX IF NOT EXISTS idx_email_logs_farm_id ON email_logs(farm_id) WHERE is_deleted = 0;
+      CREATE INDEX IF NOT EXISTS idx_email_logs_user_id ON email_logs(user_id) WHERE is_deleted = 0;
+      CREATE INDEX IF NOT EXISTS idx_email_logs_date ON email_logs(date) WHERE is_deleted = 0;
+      CREATE INDEX IF NOT EXISTS idx_email_logs_is_active ON email_logs(is_active) WHERE is_deleted = 0;
+
+      -- Create trigger for updated_at
+      CREATE TRIGGER update_email_logs_updated_at
+      BEFORE UPDATE ON email_logs
+      FOR EACH ROW
+      EXECUTE FUNCTION update_updated_at_column();
+    `,
+    down: `
+      -- Drop trigger
+      DROP TRIGGER IF EXISTS update_email_logs_updated_at ON email_logs;
+
+      -- Drop indexes
+      DROP INDEX IF EXISTS idx_email_logs_farm_id;
+      DROP INDEX IF EXISTS idx_email_logs_user_id;
+      DROP INDEX IF EXISTS idx_email_logs_date;
+      DROP INDEX IF EXISTS idx_email_logs_is_active;
+
+      -- Drop table
+      DROP TABLE IF EXISTS email_logs CASCADE;
     `
   }
 ];
