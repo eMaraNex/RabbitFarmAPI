@@ -64,6 +64,7 @@ export const rabbitSchema = Joi.object({
     notes: Joi.string().allow(null),
     parent_male_id: Joi.string().allow(null),
     parent_female_id: Joi.string().allow(null),
+    hutch_name: Joi.string().allow(null)
 });
 
 export const rabbitUpdateSchema = Joi.object({
