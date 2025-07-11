@@ -113,7 +113,7 @@ class RabbitsService {
         try {
             const result = await DatabaseHelper.executeQuery(
                 `
-                SELECT r.*, h.id AS hutch_id,
+                SELECT r.*, h.id AS hutch_id, h.name AS hutch_name,
                     (SELECT JSON_AGG(
                         JSON_BUILD_OBJECT(
                             'hutch_id', hr.hutch_id,
@@ -167,9 +167,13 @@ class RabbitsService {
 
     static async getAllRabbits(farmId, hutchId) {
         try {
-            const query = hutchId
-                ? 'SELECT * FROM rabbits WHERE farm_id = $1 AND hutch_id = $2 AND is_deleted = 0 ORDER BY created_at DESC'
-                : 'SELECT * FROM rabbits WHERE farm_id = $1 AND is_deleted = 0 ORDER BY created_at DESC';
+            const queryWithHutchId = `SELECT rb.*, ht.name AS hutch_name FROM rabbits rb
+                INNER JOIN hutches ht ON ht.id = rb.hutch_id
+                WHERE rb.farm_id = $1 AND rb.hutch_id = $2 AND rb.is_deleted = 0 ORDER BY rb.created_at DESC`;
+            const queryWithNoHutchId = `SELECT rb.*, ht.name AS hutch_name FROM rabbits rb
+            INNER JOIN hutches ht ON ht.id = rb.hutch_id
+            WHERE rb.farm_id = $1 AND rb.is_deleted = 0 ORDER BY rb.created_at DESC`;
+            const query = hutchId ? queryWithHutchId : queryWithNoHutchId;
             const params = hutchId ? [farmId, hutchId] : [farmId];
             const result = await DatabaseHelper.executeQuery(query, params);
             return result.rows;
@@ -388,7 +392,7 @@ class RabbitsService {
         try {
             const result = await DatabaseHelper.executeQuery(
                 `
-                SELECT r.*, h.id AS hutch_id,
+                SELECT r.*, h.id AS hutch_id, h.name AS hutch_name,
                     (SELECT JSON_AGG(
                         JSON_BUILD_OBJECT(
                             'hutch_id', hr.hutch_id,
