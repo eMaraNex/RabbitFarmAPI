@@ -48,11 +48,11 @@ class RowsService {
 
             for (const [level, count] of Object.entries(distribution)) {
                 for (let position = 1; position <= count; position++) {
-                    const hutchId = `${name}-${level}${position}`;
+                    const hutchName = `${name}-${level}${position}`;
                     hutches.push([
-                        hutchId,
                         row.id,
                         farm_id,
+                        hutchName,
                         level,
                         position,
                         'medium',
@@ -64,10 +64,10 @@ class RowsService {
                 }
             }
 
-            // Insert hutches
+            // Insert hutches with auto-generated UUID for id
             for (const hutch of hutches) {
                 await DatabaseHelper.executeQuery(
-                    'INSERT INTO hutches (id, row_id, farm_id, level, position, size, material, features, is_occupied, created_at, is_deleted) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10)',
+                    'INSERT INTO hutches (id, row_id, farm_id, name, level, position, size, material, features, is_occupied, created_at, is_deleted) VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10)',
                     hutch
                 );
             }

@@ -51,7 +51,7 @@ const migrations = [
       -- Create farms table
       CREATE TABLE IF NOT EXISTS farms (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        name VARCHAR(255) NOT NULL,
+        name VARCHAR(255) NOT NULL UNIQUE,
         location VARCHAR(255),
         latitude DECIMAL(9,2),
         longitude DECIMAL(9,2),
@@ -99,7 +99,7 @@ const migrations = [
       -- Create rows table
       CREATE TABLE IF NOT EXISTS rows (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        name VARCHAR(50) NOT NULL UNIQUE,
+        name VARCHAR(50) NOT NULL,
         farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
         description TEXT,
         levels TEXT[] NOT NULL DEFAULT ARRAY['A', 'B', 'C']::TEXT[],
@@ -107,12 +107,15 @@ const migrations = [
         occupied INTEGER DEFAULT 0 CHECK (occupied >= 0 AND occupied <= capacity),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        -- Unique constraint: row name must be unique within each farm
+        UNIQUE(farm_id, name)
       );
 
       -- Create hutches table
       CREATE TABLE IF NOT EXISTS hutches (
-        id VARCHAR(50) PRIMARY KEY,
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        name VARCHAR(50) NOT NULL,
         row_id UUID REFERENCES rows(id) ON DELETE CASCADE,
         farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
         level VARCHAR(1) NOT NULL CHECK (level IN ('A', 'B', 'C')),
@@ -125,6 +128,9 @@ const migrations = [
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        -- Unique constraint: hutch name must be unique within each farm
+        UNIQUE(farm_id, name),
+        -- Position must be unique within each row
         UNIQUE(row_id, level, position)
       );
 
@@ -139,7 +145,7 @@ const migrations = [
         color VARCHAR(50) NOT NULL,
         birth_date DATE NOT NULL,
         weight DECIMAL(5,2) NOT NULL CHECK (weight > 0),
-        hutch_id VARCHAR(50) REFERENCES hutches(id),
+        hutch_id UUID REFERENCES hutches(id),
         parent_male_id VARCHAR(200) REFERENCES rabbits(rabbit_id),
         parent_female_id VARCHAR(200) REFERENCES rabbits(rabbit_id),
         acquisition_type VARCHAR(20) DEFAULT 'birth',
@@ -161,7 +167,7 @@ const migrations = [
       -- Create hutch_rabbit_history table
       CREATE TABLE IF NOT EXISTS hutch_rabbit_history (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        hutch_id VARCHAR(50) REFERENCES hutches(id) ON DELETE CASCADE,
+        hutch_id UUID REFERENCES hutches(id) ON DELETE CASCADE,
         rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
         farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
         assigned_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -330,7 +336,7 @@ const migrations = [
       CREATE TABLE IF NOT EXISTS feeding_records (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
-        hutch_id VARCHAR(50) REFERENCES hutches(id),
+        hutch_id UUID REFERENCES hutches(id),
         farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
         feed_type VARCHAR(50) NOT NULL,
         amount VARCHAR(50) NOT NULL,
@@ -385,7 +391,7 @@ const migrations = [
         includes_manure BOOLEAN DEFAULT false,
         buyer_name VARCHAR(100),
         notes TEXT,
-        hutch_id VARCHAR(50) REFERENCES hutches(id),
+        hutch_id UUID REFERENCES hutches(id),
         is_deleted INTEGER DEFAULT 0 CHECK (is_deleted IN (0, 1)),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -410,7 +416,7 @@ const migrations = [
       CREATE TABLE IF NOT EXISTS removal_records (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         rabbit_id VARCHAR(200) NOT NULL REFERENCES rabbits(rabbit_id) ON DELETE CASCADE,
-        hutch_id VARCHAR(50) REFERENCES hutches(id),
+        hutch_id UUID REFERENCES hutches(id),
         farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
         reason VARCHAR(100) NOT NULL CHECK (reason IN ('sale', 'death', 'transfer', 'breeding', 'other')),
         notes TEXT,
@@ -525,20 +531,6 @@ const migrations = [
     version: 7,
     name: 'create_indexes_and_triggers',
     up: `
-      -- Create unique indexes for rows (name + farm_id combination)
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_rows_name_farm_unique 
-      ON rows (name, farm_id) 
-      WHERE is_deleted = 0;
-
-      -- Create unique indexes for hutches (proper handling of row_id nulls)
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_hutches_row_level_position 
-      ON hutches (row_id, level, position) 
-      WHERE row_id IS NOT NULL AND is_deleted = 0;
-
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_hutches_standalone_farm_level_position 
-      ON hutches (farm_id, level, position) 
-      WHERE row_id IS NULL AND is_deleted = 0;
-
       -- Create performance indexes
       CREATE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_users_farm_id ON users(farm_id) WHERE is_deleted = 0;
@@ -549,8 +541,10 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_rabbits_status ON rabbits(status) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_hutches_row_id ON hutches(row_id) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_hutches_farm_id ON hutches(farm_id) WHERE is_deleted = 0;
+      CREATE INDEX IF NOT EXISTS idx_hutches_name ON hutches(name) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_hutches_is_occupied ON hutches(is_occupied) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_rows_farm_id ON rows(farm_id) WHERE is_deleted = 0;
+      CREATE INDEX IF NOT EXISTS idx_rows_name ON rows(name) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_hutch_rabbit_history_hutch_id ON hutch_rabbit_history(hutch_id) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_hutch_rabbit_history_rabbit_id ON hutch_rabbit_history(rabbit_id) WHERE is_deleted = 0;
       CREATE INDEX IF NOT EXISTS idx_breeding_records_farm_id ON breeding_records(farm_id) WHERE is_deleted = 0;
@@ -670,9 +664,6 @@ const migrations = [
       DROP FUNCTION IF EXISTS update_row_occupied;
 
       -- Drop indexes
-      DROP INDEX IF EXISTS idx_rows_name_farm_unique;
-      DROP INDEX IF EXISTS idx_hutches_row_level_position;
-      DROP INDEX IF EXISTS idx_hutches_standalone_farm_level_position;
       DROP INDEX IF EXISTS idx_users_email;
       DROP INDEX IF EXISTS idx_users_farm_id;
       DROP INDEX IF EXISTS idx_farms_created_by;
@@ -682,8 +673,10 @@ const migrations = [
       DROP INDEX IF EXISTS idx_rabbits_status;
       DROP INDEX IF EXISTS idx_hutches_row_id;
       DROP INDEX IF EXISTS idx_hutches_farm_id;
+      DROP INDEX IF EXISTS idx_hutches_name;
       DROP INDEX IF EXISTS idx_hutches_is_occupied;
       DROP INDEX IF EXISTS idx_rows_farm_id;
+      DROP INDEX IF EXISTS idx_rows_name;
       DROP INDEX IF EXISTS idx_hutch_rabbit_history_hutch_id;
       DROP INDEX IF EXISTS idx_hutch_rabbit_history_rabbit_id;
       DROP INDEX IF EXISTS idx_breeding_records_farm_id;
@@ -810,7 +803,7 @@ const migrations = [
         farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
         user_id UUID REFERENCES users(id) ON DELETE SET NULL,
         rabbit_id VARCHAR(200) REFERENCES rabbits(rabbit_id) ON DELETE SET NULL,
-        hutch_id VARCHAR(50) REFERENCES hutches(id) ON DELETE SET NULL,
+        hutch_id UUID REFERENCES hutches(id) ON DELETE SET NULL,
         notify_on DATE[] NOT NULL DEFAULT '{}',
         created_on TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_on TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
