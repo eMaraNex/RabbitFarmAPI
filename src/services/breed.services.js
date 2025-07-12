@@ -43,8 +43,6 @@ class BreedingService {
         notifyOnDate = notifyOnDate || getLocalDateString(new Date(), 'Africa/Nairobi');
 
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
-
             // Validate doe and buck
             const doeResult = await DatabaseHelper.executeQuery(
                 'SELECT 1 FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND gender = $3 AND is_deleted = 0',
@@ -167,12 +165,9 @@ class BreedingService {
                     ...alert
                 });
             }
-
-            await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Breeding record created for doe ${doe_id} by user ${userId}`);
             return breedingRecord;
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
             logger.error(`Error creating breeding record: ${error.message}`);
             throw error;
         }
@@ -263,8 +258,6 @@ class BreedingService {
         const { actual_birth_date, number_of_kits, notes } = updateData;
 
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
-
             const recordResult = await DatabaseHelper.executeQuery(
                 'SELECT * FROM breeding_records WHERE id = $1 AND farm_id = $2 AND is_deleted = 0',
                 [recordId, farmId]
@@ -395,12 +388,9 @@ class BreedingService {
                 ]
             );
             const updatedRecord = updatedRecordResult.rows[0];
-
-            await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Breeding record ${recordId} updated by user ${userId}`);
             return updatedRecord;
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
             logger.error(`Error updating breeding record ${recordId}: ${error.message}`);
             throw error;
         }
@@ -408,8 +398,6 @@ class BreedingService {
 
     static async deleteBreedingRecord(recordId, farmId, userId) {
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
-
             const recordResult = await DatabaseHelper.executeQuery(
                 'SELECT doe_id, actual_birth_date FROM breeding_records WHERE id = $1 AND farm_id = $2 AND is_deleted = 0',
                 [recordId, farmId]
@@ -446,24 +434,18 @@ class BreedingService {
                     [breedingRecord.doe_id]
                 );
             }
-
-            await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Breeding record ${recordId} soft deleted by user ${userId}`);
             return { id: recordId };
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
             logger.error(`Error deleting breeding record ${recordId}: ${error.message}`);
             throw error;
         }
     }
     static async createKitRecord(kits, farm_id, userId) {
-        const client = await pool.connect();
         const { kitz } = kits;
         try {
-            await client.query('BEGIN');
-
             // Validate farm exists
-            const farmResult = await client.query(
+            const farmResult = await DatabaseHelper.executeQuery(
                 'SELECT id FROM farms WHERE id = $1 AND is_deleted = 0',
                 [farm_id]
             );
@@ -488,7 +470,7 @@ class BreedingService {
 
             // Validate breeding_record_id
             const breedingRecordIds = [...new Set(kitz.map(kit => kit.breeding_record_id))];
-            const breedingResult = await client.query(
+            const breedingResult = await DatabaseHelper.executeQuery(
                 'SELECT id, doe_id, number_of_kits FROM breeding_records WHERE id = ANY($1) AND farm_id = $2 AND is_deleted = 0',
                 [breedingRecordIds, farm_id]
             );
@@ -498,7 +480,7 @@ class BreedingService {
 
             // Validate number of kitz doesn't exceed breeding record (with some flexibility)
             for (const record of breedingResult.rows) {
-                const existingKits = await client.query(
+                const existingKits = await DatabaseHelper.executeQuery(
                     'SELECT COUNT(*) FROM kit_records WHERE breeding_record_id = $1 AND is_deleted = 0',
                     [record.id]
                 );
@@ -516,7 +498,7 @@ class BreedingService {
             if (!kitNumbers.length) {
                 throw new ValidationError('At least one valid kit number is required');
             }
-            const existingKits = await client.query(
+            const existingKits = await DatabaseHelper.executeQuery(
                 'SELECT kit_number FROM kit_records WHERE farm_id = $1 AND kit_number = ANY($2) AND is_deleted = 0',
                 [farm_id, kitNumbers]
             );
@@ -528,7 +510,7 @@ class BreedingService {
             // Validate parent IDs (only if provided)
             const parentIds = [...new Set(kitz.map(kit => [kit.parent_male_id, kit.parent_female_id]).flat().filter(id => id))];
             if (parentIds.length > 0) {
-                const parentResult = await client.query(
+                const parentResult = await DatabaseHelper.executeQuery(
                     'SELECT rabbit_id, gender FROM rabbits WHERE farm_id = $1 AND rabbit_id = ANY($2) AND is_deleted = 0',
                     [farm_id, parentIds]
                 );
@@ -583,7 +565,7 @@ class BreedingService {
                 }
 
                 // Insert into rabbit_birth_history if not exists
-                const birthHistoryResult = await client.query(
+                const birthHistoryResult = await DatabaseHelper.executeQuery(
                     `SELECT id FROM rabbit_birth_history
                  WHERE breeding_record_id = $1 AND is_deleted = 0`,
                     [breeding_record_id]
@@ -591,7 +573,7 @@ class BreedingService {
                 let birthHistoryId = birthHistoryResult.rows[0]?.id;
                 if (!birthHistoryId) {
                     birthHistoryId = uuidv4();
-                    const newRabbitHistory = await client.query(
+                    const newRabbitHistory = await DatabaseHelper.executeQuery(
                         `INSERT INTO rabbit_birth_history (
                        id, farm_id, doe_id, breeding_record_id, birth_date, number_of_kits, notes, created_at, is_deleted
                      ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, 0)`,
@@ -605,11 +587,10 @@ class BreedingService {
                             notes || null
                         ]
                     );
-                    console.log('Inserted new rabbit birth history:', newRabbitHistory.rows[0]);
                 }
 
                 // Insert kit with flexible validation
-                const result = await client.query(
+                const result = await DatabaseHelper.executeQuery(
                     `INSERT INTO kit_records (
                    id, breeding_record_id, farm_id, kit_number, birth_weight, gender, color, status,
                    weaning_date, parent_male_id, parent_female_id, notes, created_at, updated_at, is_deleted
@@ -636,7 +617,7 @@ class BreedingService {
             // Create alert for relocating kits post-weaning
             const actualBirthDateUTC = dayjs(kitz[0].actual_birth_date).utc();
             const weaningDate = actualBirthDateUTC.add(42, 'day').toDate();
-            const hutchResult = await client.query(
+            const hutchResult = await DatabaseHelper.executeQuery(
                 'SELECT hutch_id FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND is_deleted = 0',
                 [kitz[0].parent_female_id, farm_id]
             );
@@ -657,8 +638,6 @@ class BreedingService {
                     getUTCDateString(weaningDate)
                 ]
             });
-
-            await client.query('COMMIT');
             logger.info(`Created ${insertedKits.length} kits for farm ${farm_id} by user ${userId}`);
             return {
                 success: true,
@@ -666,7 +645,6 @@ class BreedingService {
                 data: insertedKits
             };
         } catch (error) {
-            await client.query('ROLLBACK');
             logger.error(`Error creating bulk kits for farm ${farm_id}: ${error.message}`);
             return {
                 success: false,
@@ -681,8 +659,6 @@ class BreedingService {
         const { weaning_weight, status, notes, parent_male_id, parent_female_id, birth_weight, gender, color } = updateData;
 
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
-
             const kitResult = await DatabaseHelper.executeQuery(
                 'SELECT kit_number, breeding_record_id, farm_id FROM kit_records WHERE id = $1 AND is_deleted = 0',
                 [kitId]
@@ -750,12 +726,9 @@ class BreedingService {
             }
 
             const updatedKit = updatedKitResult.rows[0];
-
-            await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Kit record ${kitId} updated by user ${userId}`);
             return updatedKit;
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
             logger.error(`Error updating kit record ${kitId}: ${error.message}`);
             throw error;
         }

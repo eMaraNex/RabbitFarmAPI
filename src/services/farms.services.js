@@ -11,8 +11,6 @@ class FarmsService {
         }
 
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
-
             // Check if farm name is unique for the user
             const existingFarm = await DatabaseHelper.executeQuery(
                 'SELECT 1 FROM farms WHERE name = $1 AND created_by = $2 AND is_deleted = 0',
@@ -55,12 +53,9 @@ class FarmsService {
                     [farmId, userId]
                 );
             }
-
-            await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Farm ${name} (ID: ${farmId}) created by user ${userId}`);
             return farmResult.rows[0];
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
             logger.error(`Error creating farm: ${error.message}`);
             throw error;
         }
@@ -127,7 +122,6 @@ class FarmsService {
 
     static async deleteFarm(farmId, userId) {
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
             const result = await DatabaseHelper.executeQuery(
                 'UPDATE farms SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND created_by = $2 AND is_deleted = 0 RETURNING *',
                 [farmId, userId]
@@ -149,12 +143,9 @@ class FarmsService {
                 'UPDATE rabbits SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE farm_id = $1 AND is_deleted = 0',
                 [farmId]
             );
-
-            await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Farm ${farmId} soft deleted by user ${userId}`);
             return result.rows[0];
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
             logger.error(`Error deleting farm ${farmId}: ${error.message}`);
             throw error;
         }

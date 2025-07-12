@@ -32,8 +32,6 @@ class EarningsService {
         }
 
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
-
             // Validate rabbit_id if provided
             // if (rabbit_id) {
             //     const rabbitResult = await DatabaseHelper.executeQuery(
@@ -80,12 +78,9 @@ class EarningsService {
                     hutch_id || null,
                 ]
             );
-
-            await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Earnings record created by user ${userId}`);
             return result.rows[0];
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
             logger.error(`Error creating earnings: ${error.message}`);
             throw error;
         }
@@ -176,8 +171,6 @@ class EarningsService {
         } = earningsData;
 
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
-
             if (type && !['rabbit_sale', 'urine_sale', 'manure_sale', 'other'].includes(type)) {
                 throw new ValidationError('Type must be rabbit_sale, urine_sale, manure_sale, or other');
             }
@@ -244,12 +237,9 @@ class EarningsService {
             if (result.rows.length === 0) {
                 throw new ValidationError('Not found earnings record');
             }
-
-            await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Earnings record ${id} updated by user ${userId}`);
             return result.rows[0];
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
             logger.error(`Error updating earnings ${id}: ${error.message}`);
             throw error;
         }
@@ -257,8 +247,6 @@ class EarningsService {
 
     static async deleteEarnings(id, farmId, userId) {
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
-
             const result = await DatabaseHelper.executeQuery(
                 `UPDATE earnings_records
                 SET is_deleted = TRUE, updated_at = CURRENT_TIMESTAMP
@@ -269,12 +257,9 @@ class EarningsService {
             if (result.rows.length === 0) {
                 throw new ValidationError('Earnings record not found');
             }
-
-            await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Earnings record ${id} soft deleted by user ${userId}`);
             return result.rows[0];
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
             logger.error(`Error deleting earnings ${id}: ${error.message}`);
             throw error;
         }

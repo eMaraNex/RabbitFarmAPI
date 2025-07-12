@@ -15,8 +15,6 @@ class RabbitsService {
         }
 
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
-
             // Check if rabbit_id is unique
             const existingRabbit = await DatabaseHelper.executeQuery(
                 'SELECT 1 FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND is_deleted = 0',
@@ -98,12 +96,9 @@ class RabbitsService {
                     [uuidv4(), hutch_id, rabbit.rabbit_id, farm_id]
                 );
             }
-
-            await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Rabbit ${rabbit_id} created by user ${userId}`);
             return rabbit;
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
             logger.error(`Error creating rabbit: ${error.message}`);
             throw error;
         }
@@ -191,8 +186,6 @@ class RabbitsService {
         } = rabbitData;
 
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
-
             // Validate hutch
             let is_occupied = false;
             if (hutch_id) {
@@ -303,12 +296,9 @@ class RabbitsService {
                     );
                 }
             }
-
-            await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Rabbit ${rabbitId} updated by user ${userId}`);
             return updatedRabbit;
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
             logger.error(`Error updating rabbit ${rabbitId}: ${error.message}`);
             throw error;
         }
@@ -321,8 +311,6 @@ class RabbitsService {
         }
 
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
-
             const rabbitResult = await DatabaseHelper.executeQuery(
                 'SELECT id, rabbit_id, hutch_id FROM rabbits WHERE rabbit_id = $1 AND farm_id = $2 AND is_deleted = 0',
                 [rabbitId, farmId]
@@ -377,12 +365,9 @@ class RabbitsService {
                     );
                 }
             }
-
-            await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Rabbit ${rabbitId} soft deleted by user ${userId}`);
             return deletedRabbit;
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
             logger.error(`Error deleting rabbit ${rabbitId}: ${error.message}`);
             throw error;
         }

@@ -38,7 +38,6 @@ class EmailService {
      */
     async initialize() {
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
             const today = new Date().toISOString().split('T')[0];
             const result = await DatabaseHelper.executeQuery(`
                 SELECT COUNT(*) as count
@@ -49,7 +48,6 @@ class EmailService {
 
             this.emailsSentToday = parseInt(result.rows[0].count, 10) || 0;
             this.logger.info(`Email service initialized. Emails sent today: ${this.emailsSentToday}`);
-            await DatabaseHelper.executeQuery('BEGIN');
         } catch (error) {
             this.logger.error(`Initialization error: ${error.message}`);
             throw error;

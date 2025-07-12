@@ -25,8 +25,6 @@ class RowsService {
         }
 
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
-
             // Check if row exists
             const existingRow = await DatabaseHelper.executeQuery(
                 'SELECT id FROM rows WHERE name = $1 AND farm_id = $2 AND is_deleted = 0',
@@ -71,12 +69,9 @@ class RowsService {
                     hutch
                 );
             }
-
-            await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Row ${row.id} (${name}) created with ${hutches.length} hutches (${JSON.stringify(distribution)}) by user ${userId}`);
             return row;
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
             logger.error(`Error creating row: ${error.message}`);
             throw error;
         }
@@ -88,8 +83,6 @@ class RowsService {
         }
 
         try {
-            await DatabaseHelper.executeQuery('BEGIN')
-
             // Get current row
             const rowResult = await DatabaseHelper.executeQuery(
                 'SELECT * FROM rows WHERE id = $1 AND farm_id = $2 AND is_deleted = 0',
@@ -108,12 +101,9 @@ class RowsService {
                 'UPDATE rows SET capacity = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND farm_id = $3 AND is_deleted = 0 RETURNING *',
                 [newCapacity, row_id, farmId]
             )
-
-            await DatabaseHelper.executeQuery('COMMIT')
             logger.info(`Row ${row_id} (${currentRow.name}) expanded by ${additionalCapacity} hutches to total capacity ${newCapacity} by user ${userId}`)
             return updatedRowResult.rows[0]
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK')
             logger.error(`Error expanding row ${row_id}: ${error.message}`)
             throw error
         }
@@ -168,7 +158,6 @@ class RowsService {
 
     static async deleteRow(rowId, farmId, userId) {
         try {
-            await DatabaseHelper.executeQuery('BEGIN')
             const result = await DatabaseHelper.executeQuery(
                 'UPDATE rows SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND farm_id = $2 AND is_deleted = 0 RETURNING *',
                 [rowId, farmId]
@@ -181,12 +170,9 @@ class RowsService {
                 'UPDATE hutches SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE row_id = $1 AND farm_id = $2 AND is_deleted = 0',
                 [rowId, farmId]
             )
-
-            await DatabaseHelper.executeQuery('COMMIT')
             logger.info(`Row ${rowId} (${result.rows[0].name}) soft deleted by user ${userId}`)
             return result.rows[0]
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK')
             logger.error(`Error deleting row ${rowId}: ${error.message}`)
             throw error
         }
