@@ -4,6 +4,7 @@ import { validateRequest } from '../middleware/validateRequest.js';
 import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema } from '../utils/auth.validator.js';
 import rateLimitMiddleware from '../middleware/rate-limit.middleware.js';
 import authMiddleware from '../middleware/auth.middleware.js';
+import { resendVerificationSchema } from '../utils/validator.js';
 
 const router = express.Router();
 
@@ -263,5 +264,57 @@ router.get('/reset-password/:token', AuthController.validateResetToken);
  *         description: Unauthorized
  */
 router.post('/logout', authMiddleware, AuthController.logout);
+/**
+ * @swagger
+ * /api/v1/auth/verify-email/{token}:
+ *   get:
+ *     summary: Verify email address
+ *     tags: [Auth]
+ *     parameters:
+ *       - in: path
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Email verification token
+ *     responses:
+ *       200:
+ *         description: Email verified successfully
+ *         content:
+ *           text/html:
+ *             schema:
+ *               type: string
+ *       400:
+ *         description: Invalid or expired token
+ */
+router.get('/verify-email/:token', AuthController.verifyEmail);
+
+/**
+ * @swagger
+ * /api/v1/auth/resend-verification:
+ *   post:
+ *     summary: Resend email verification
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *             required:
+ *               - email
+ *     responses:
+ *       200:
+ *         description: Verification email sent
+ *       400:
+ *         description: Invalid email or already verified
+ *       429:
+ *         description: Too many requests
+ */
+router.post('/resend-verification', rateLimitMiddleware(3, 60 * 1000), validateRequest(resendVerificationSchema), AuthController.resendVerificationEmail);
 
 export default router;

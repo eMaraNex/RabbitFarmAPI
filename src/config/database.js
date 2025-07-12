@@ -44,7 +44,9 @@ export class DatabaseHelper {
     static async executeQuery(query, params = []) {
         const client = await pool.connect();
         try {
+            await client.query('BEGIN');
             const result = await client.query(query, params);
+            await client.query('COMMIT');
             return result;
         } catch (error) {
             console.error('Database query error:', { query, params, error: error.message });
