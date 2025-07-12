@@ -137,7 +137,7 @@ class AuthService {
             const newUser = userResult.rows[0];
 
             // Send verification email
-            const verifyUrl = `${process.env.BASE_URL}/api/v1/auth/verify-email/${verificationToken}`;
+            const verifyUrl = `${process.env.PROD_BASE_URL}/api/v1/auth/verify-email/${verificationToken}`;
             const emailService = new EmailService({}, logger);
 
             try {
@@ -350,7 +350,7 @@ class AuthService {
             );
 
             // Send verification email
-            const verifyUrl = `${process.env.BASE_URL}/api/v1/auth/verify-email/${verificationToken}`;
+            const verifyUrl = `${process.env.PROD_BASE_URL}/api/v1/auth/verify-email/${verificationToken}`;
             const emailService = new EmailService({}, logger);
 
             const emailResult = await emailService.sendEmail({
@@ -398,7 +398,7 @@ class AuthService {
                 [uuidv4(), userId, token, expiresAt]
             );
 
-            const resetUrl = `${process.env.BASE_URL}/api/v1/auth/reset-password/${token}`;
+            const resetUrl = `${process.env.PROD_BASE_URL}/api/v1/auth/reset-password/${token}`;
             logger.info(`Generated reset URL: ${resetUrl}`);
             const emailService = new EmailService({}, logger);
             const emailResult = await emailService.sendEmail({
