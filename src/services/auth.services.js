@@ -91,15 +91,17 @@ class AuthService {
             }
 
             // Validate farm_id if provided
-            // if (farm_id) {
-            const farmResult = await DatabaseHelper.executeQuery(
-                'SELECT id FROM farms WHERE id = $1 AND is_deleted = 0 AND is_active = 1',
-                [farm_id]
-            );
-            if (farmResult.rows.length === 0) {
-                throw new ValidationError('Invalid or inactive farm specified');
+            let farmDetails;
+            if (farm_id) {
+                const farmResult = await DatabaseHelper.executeQuery(
+                    'SELECT id FROM farms WHERE id = $1 AND is_deleted = 0 AND is_active = 1',
+                    [farm_id]
+                );
+                farmDetails = farmResult.rows[0];
+                if (farmResult.rows.length === 0) {
+                    throw new ValidationError('Invalid or inactive farm specified');
+                }
             }
-            // }
 
             // Check for existing email
             const emailCheck = await DatabaseHelper.executeQuery(
@@ -139,14 +141,13 @@ class AuthService {
             // Send verification email
             const verifyUrl = `${process.env.PROD_BASE_URL}/api/v1/auth/verify-email/${verificationToken}`;
             const emailService = new EmailService({}, logger);
-            const farmName = farmResult.rows[0];
             try {
                 const emailResult = await emailService.sendEmail({
                     to: email,
                     subject: 'Verify Your Email - Rabbit Farm',
                     text: `Please verify your email by clicking: ${verifyUrl}`,
                     templatePath: 'src/templates/email-verification.html',
-                    appName: farmName.name ?? 'Rabbit Farm',
+                    appName: farmDetails?.name ?? 'Rabbit Farm',
                     verifyUrl
                 }, 'email_verification');
 
