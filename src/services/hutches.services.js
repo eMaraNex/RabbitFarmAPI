@@ -16,8 +16,6 @@ class HutchesService {
         }
 
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
-
             const farmResult = await DatabaseHelper.executeQuery(
                 'SELECT id FROM farms WHERE id = $1 AND is_deleted = 0',
                 [farm_id]
@@ -94,12 +92,9 @@ class HutchesService {
                  RETURNING *`,
                 insertValues
             );
-
-            await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Hutch ${hutchName} created by user ${userId}`);
             return result.rows[0];
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
             logger.error(`Error creating hutch: ${error.message}`);
             throw error;
         }
@@ -177,8 +172,6 @@ class HutchesService {
     static async updateHutch(id, farmId, hutchData, userId) {
         const { row_id, level, position, size, material, features, is_occupied, last_cleaned, name } = hutchData;
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
-
             if (row_id) {
                 const rowResult = await DatabaseHelper.executeQuery(
                     'SELECT levels, name AS row_name FROM rows WHERE id = $1 AND farm_id = $2 AND is_deleted = 0',
@@ -243,12 +236,9 @@ class HutchesService {
             if (result.rows.length === 0) {
                 throw new ValidationError('Hutch not found');
             }
-
-            await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Hutch ${id} updated by user ${userId}`);
             return result.rows[0];
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
             logger.error(`Error updating hutch ${id}: ${error.message}`);
             throw error;
         }
@@ -256,8 +246,6 @@ class HutchesService {
 
     static async deleteHutch(id, farmId, userId) {
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
-
             const rabbitResult = await DatabaseHelper.executeQuery(
                 'SELECT 1 FROM rabbits WHERE hutch_id = $1 AND farm_id = $2 AND is_deleted = 0',
                 [id, farmId]
@@ -294,11 +282,8 @@ class HutchesService {
                 }
                 logger.info(`Hutch ${id} permanently deleted by user ${userId} to free up position`);
             }
-
-            await DatabaseHelper.executeQuery('COMMIT');
             return result.rows[0];
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
             logger.error(`Error deleting hutch ${id}: ${error.message}`);
             throw error;
         }

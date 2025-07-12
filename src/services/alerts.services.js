@@ -88,8 +88,6 @@ class AlertService {
         ];
 
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
-
             const result = await DatabaseHelper.executeQuery(
                 `INSERT INTO alerts (
                     id, name, alert_start_date, alert_end_date, alert_type, severity, message, status,
@@ -114,7 +112,6 @@ class AlertService {
             );
 
             const alert = result.rows[0];
-            await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Alert ${alert.id} created for farm ${farm_id}`);
 
             // Send notification if current local date (Africa/Nairobi) is in notify_on
@@ -132,7 +129,6 @@ class AlertService {
 
             return alert;
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
             logger.error(`Error creating alert: ${error.message}`);
             throw error;
         }
@@ -167,8 +163,6 @@ class AlertService {
      */
     async sendAlertNotification(alert) {
         try {
-            await DatabaseHelper.executeQuery('BEGIN');
-
             // Get user email
             const userResult = await DatabaseHelper.executeQuery(
                 'SELECT email FROM users WHERE id = $1 AND is_deleted = 0',
@@ -176,10 +170,8 @@ class AlertService {
             );
             const userEmail = userResult.rows[0]?.email;
             const templatePath = path.join(__dirname, '../templates/alert_notification.html');
-            console.log('Resolved templatePath:', templatePath);
 
             if (userEmail) {
-
                 const emailResult = await this.emailService.sendEmail({
                     ...alert,
                     from: process.env.DEFAULT_SENDER_EMAIL,
@@ -201,12 +193,9 @@ class AlertService {
                  WHERE id = $1`,
                 [alert.id]
             );
-
-            await DatabaseHelper.executeQuery('COMMIT');
             logger.info(`Notification sent for alert ${alert.id}`);
             return { success: true, message: 'Notification sent successfully' };
         } catch (error) {
-            await DatabaseHelper.executeQuery('ROLLBACK');
             logger.error(`Error sending alert notification ${alert.id}: ${error.message}`);
             throw error;
         }
@@ -238,7 +227,7 @@ class AlertService {
      * @returns {Promise<Array>} - List of alerts
      */
     async getFarmAlerts(farmId) {
-        const currentLocalDate = getLocalDateString(new Date(), 'Africa/Nairobi'); 
+        const currentLocalDate = getLocalDateString(new Date(), 'Africa/Nairobi');
         const query = `
             SELECT * FROM alerts
             WHERE farm_id = $1
@@ -317,7 +306,7 @@ class AlertService {
             logger.error(`Error fetching active farms: ${error.message}`);
             throw error;
         }
-}
+    }
 }
 
 export default new AlertService();
