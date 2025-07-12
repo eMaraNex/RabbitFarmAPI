@@ -343,3 +343,9 @@ export const farmUpdateSchema = Joi.object({
             'string.max': 'Timezone must be 50 characters or less'
         })
 });
+export const resendVerificationSchema = Joi.object({
+    email: Joi.string().email().required().messages({
+        'string.email': 'Please provide a valid email address',
+        'any.required': 'Email is required'
+    })
+});
