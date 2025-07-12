@@ -373,56 +373,97 @@ class RabbitsService {
         }
     }
 
-    static async getAllRabbitDetails(farmId) {
+    static async getAllRabbitDetails(farmId, options = {}) {
         try {
-            const result = await DatabaseHelper.executeQuery(
-                `
-                SELECT r.*, h.id AS hutch_id, h.name AS hutch_name,
-                    (SELECT JSON_AGG(
-                        JSON_BUILD_OBJECT(
-                            'hutch_id', hr.hutch_id,
-                            'assigned_at', hr.assigned_at,
-                            'removed_at', hr.removed_at,
-                            'removal_reason', hr.removal_reason,
-                            'removal_notes', hr.removal_notes
-                        )
+            const { page = 1, limit = 10, sortField = 'created_at', sortOrder = 'desc', searchTerm = null } = options;
+            const offset = (page - 1) * limit;
+            const allowedSortFields = [
+                'name', 'gender', 'breed', 'created_at', 'updated_at',
+                'date_of_birth', 'weight', 'color', 'hutch_name'
+            ];
+            const validSortField = allowedSortFields.includes(sortField) ? sortField : 'created_at';
+            const validSortOrder = ['asc', 'desc'].includes(sortOrder.toLowerCase()) ? sortOrder.toUpperCase() : 'DESC';
+            let whereClause = 'WHERE r.farm_id = $1 AND r.is_deleted = 0';
+            let queryParams = [farmId];
+            let paramIndex = 2;
+            if (searchTerm && searchTerm.trim()) {
+                whereClause += ` AND (
+                LOWER(r.name) LIKE $${paramIndex} OR 
+                LOWER(r.breed) LIKE $${paramIndex} OR 
+                LOWER(r.rabbit_id) LIKE $${paramIndex} OR
+                LOWER(r.gender) LIKE $${paramIndex} OR
+                LOWER(r.color) LIKE $${paramIndex}
+            )`;
+                queryParams.push(`%${searchTerm.trim().toLowerCase()}%`);
+                paramIndex++;
+            }
+            const countQuery = `
+            SELECT COUNT(*) as total
+            FROM rabbits r
+            LEFT JOIN hutches h ON r.hutch_id = h.id AND r.farm_id = h.farm_id
+            ${whereClause}
+        `;
+
+            const countResult = await DatabaseHelper.executeQuery(countQuery, queryParams);
+            const totalItems = parseInt(countResult.rows[0].total);
+            const mainQuery = `
+            SELECT r.*, h.id AS hutch_id, h.name AS hutch_name,
+                (SELECT JSON_AGG(
+                    JSON_BUILD_OBJECT(
+                        'hutch_id', hr.hutch_id,
+                        'assigned_at', hr.assigned_at,
+                        'removed_at', hr.removed_at,
+                        'removal_reason', hr.removal_reason,
+                        'removal_notes', hr.removal_notes
                     )
-                    FROM hutch_rabbit_history hr
-                    WHERE hr.rabbit_id = r.rabbit_id AND hr.is_deleted = 0) AS hutch_history,
-                    (SELECT JSON_AGG(
-                        JSON_BUILD_OBJECT(
-                            'birth_date', rbh.birth_date,
-                            'number_of_kits', rbh.number_of_kits,
-                            'breeding_record_id', rbh.breeding_record_id,
-                            'notes', rbh.notes,
-                            'kits', (
-                                SELECT JSON_AGG(
-                                    JSON_BUILD_OBJECT(
-                                        'id', kr.id,
-                                        'kit_number', kr.kit_number,
-                                        'birth_weight', kr.birth_weight,
-                                        'gender', kr.gender,
-                                        'color', kr.color,
-                                        'status', kr.status
-                                    )
+                )
+                FROM hutch_rabbit_history hr
+                WHERE hr.rabbit_id = r.rabbit_id AND hr.is_deleted = 0) AS hutch_history,
+                (SELECT JSON_AGG(
+                    JSON_BUILD_OBJECT(
+                        'birth_date', rbh.birth_date,
+                        'number_of_kits', rbh.number_of_kits,
+                        'breeding_record_id', rbh.breeding_record_id,
+                        'notes', rbh.notes,
+                        'kits', (
+                            SELECT JSON_AGG(
+                                JSON_BUILD_OBJECT(
+                                    'id', kr.id,
+                                    'kit_number', kr.kit_number,
+                                    'birth_weight', kr.birth_weight,
+                                    'gender', kr.gender,
+                                    'color', kr.color,
+                                    'status', kr.status
                                 )
-                                FROM kit_records kr
-                                WHERE kr.breeding_record_id = rbh.breeding_record_id AND kr.is_deleted = 0
                             )
+                            FROM kit_records kr
+                            WHERE kr.breeding_record_id = rbh.breeding_record_id AND kr.is_deleted = 0
                         )
                     )
-                    FROM rabbit_birth_history rbh
-                    WHERE rbh.doe_id = r.rabbit_id AND rbh.farm_id = r.farm_id AND rbh.is_deleted = 0) AS birth_history
-                FROM rabbits r
-                LEFT JOIN hutches h ON r.hutch_id = h.id AND r.farm_id = h.farm_id
-                WHERE r.farm_id = $1 AND r.is_deleted = 0
-                ORDER BY r.created_at DESC
-                `,
-                [farmId]
-            );
-            return result.rows;
+                )
+                FROM rabbit_birth_history rbh
+                WHERE rbh.doe_id = r.rabbit_id AND rbh.farm_id = r.farm_id AND rbh.is_deleted = 0) AS birth_history
+            FROM rabbits r
+            LEFT JOIN hutches h ON r.hutch_id = h.id AND r.farm_id = h.farm_id
+            ${whereClause}
+            ORDER BY ${validSortField === 'hutch_name' ? 'h.name' : 'r.' + validSortField} ${validSortOrder}
+            LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+        `;
+            queryParams.push(limit, offset);
+            const result = await DatabaseHelper.executeQuery(mainQuery, queryParams);
+            return {
+                data: result.rows,
+                pagination: {
+                    currentPage: page,
+                    totalItems: totalItems,
+                    totalPages: Math.ceil(totalItems / limit),
+                    pageSize: limit,
+                    hasNextPage: page < Math.ceil(totalItems / limit),
+                    hasPreviousPage: page > 1
+                }
+            };
         } catch (error) {
-            logger.error(`Error fetching all rabbit details for farm ${farmId}: ${error.message}`);
+            logger.error(`Error fetching paginated rabbit details for farm ${farmId}: ${error.message}`);
             throw error;
         }
     }
