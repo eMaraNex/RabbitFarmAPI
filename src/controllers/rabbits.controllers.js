@@ -67,7 +67,8 @@ class RabbitsController {
     static async getAllRabbitDetails(req, res, next) {
         try {
             const { farmId } = req.params;
-            const rabbits = await RabbitsService.getAllRabbitDetails(farmId);
+            const options = req.body;
+            const rabbits = await RabbitsService.getAllRabbitDetails(farmId, options);
             return SuccessResponse(res, 200, 'Rabbits retrieved successfully', rabbits);
         } catch (error) {
             logger.error(`Get all rabbits error: ${error.message}`);
