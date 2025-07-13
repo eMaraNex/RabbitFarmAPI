@@ -118,7 +118,7 @@ const migrations = [
         name VARCHAR(50) NOT NULL,
         row_id UUID REFERENCES rows(id) ON DELETE CASCADE,
         farm_id UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
-        level VARCHAR(1) NOT NULL CHECK (level IN ('A', 'B', 'C')),
+        level VARCHAR(1) NOT NULL CHECK (level ~ '^[A-Z]$'),
         position INTEGER NOT NULL CHECK (position BETWEEN 1 AND 50),
         size VARCHAR(20) NOT NULL DEFAULT 'medium',
         material VARCHAR(20) NOT NULL DEFAULT 'wire',
