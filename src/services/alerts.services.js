@@ -232,8 +232,8 @@ class AlertService {
             SELECT * FROM alerts
             WHERE farm_id = $1
             AND EXISTS (
-                SELECT 1 FROM unnest(notify_on) AS n(date)
-                WHERE (n.date::TIMESTAMP AT TIME ZONE 'Africa/Nairobi')::DATE = $2
+                SELECT 1 FROM unnest(notify_on) AS notify_date
+                WHERE DATE(notify_date) = $2
             )
             AND is_active = true
             AND is_deleted = false
