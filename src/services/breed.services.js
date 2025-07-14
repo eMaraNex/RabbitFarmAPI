@@ -650,8 +650,6 @@ class BreedingService {
                 success: false,
                 message: error.message || 'Failed to create kits'
             };
-        } finally {
-            client.release();
         }
     }
 

@@ -307,6 +307,29 @@ class AlertService {
             throw error;
         }
     }
+
+    /**
+ * Get alerts for a farm where notify_on matches today's date in Africa/Nairobi
+ * @param {string} farmId - Farm UUID
+ * @returns {Promise<Array>} - List of alerts
+ */
+    async getFarmCalendarAlerts(farmId) {
+        const query = `
+            SELECT * FROM alerts
+            WHERE farm_id = $1
+            AND is_active = true
+            AND is_deleted = false
+            ORDER BY severity DESC, alert_start_date ASC
+        `;
+        const params = [farmId];
+        try {
+            const result = await DatabaseHelper.executeQuery(query, params);
+            return result.rows;
+        } catch (error) {
+            logger.error(`Error fetching alerts for farm ${farmId}: ${error.message}`);
+            throw error;
+        }
+    }
 }
 
 export default new AlertService();

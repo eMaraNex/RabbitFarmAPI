@@ -5,6 +5,7 @@ import authMiddleware from '../middleware/auth.middleware.js';
 const router = express.Router();
 
 router.get('/:farmId', AlertsController.getFarmAlerts);
+router.get('/calendar/:farmId', AlertsController.getFarmCalendarAlerts);
 router.get('/mail/:farmId', AlertsController.getFarmAlerts);
 router.get('/active', authMiddleware, AlertsController.getActiveFarm);
 
