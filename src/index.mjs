@@ -68,7 +68,13 @@ app.use(helmet({
     },
 }));
 
-app.use(cors());
+app.use(cors({
+    origin: ['https://rabbit-farm-ui.vercel.app', 'http://localhost:3000'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(bodyParser.json());
 app.use(express.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -76,7 +82,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 // Rate limiting
 const limiter = rateLimit({
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-    max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
+    max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000,
     message: {
         error: 'Too many requests from this IP, please try again later.',
     },
