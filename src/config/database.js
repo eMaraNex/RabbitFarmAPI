@@ -6,16 +6,22 @@ dotenv.config();
 
 const { Pool } = pg;
 
-// Minimal PostgreSQL configuration for local connection
+// PostgreSQL configuration optimized for serverless
 const dbConfig = {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT) || 5432,
     database: process.env.DB_NAME || 'karagani-db',
     user: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD,
-    max: 20, // Max number of connections
-    idleTimeoutMillis: 30000, // Close idle connections after 30s
-    connectionTimeoutMillis: 2000 // Timeout if connection cannot be established
+    max: 1, // Reduced for serverless
+    min: 0, // No minimum connections
+    idleTimeoutMillis: 10000, // 10 seconds
+    connectionTimeoutMillis: 60000, // 60 seconds
+    acquireTimeoutMillis: 60000, // 60 seconds
+    createTimeoutMillis: 60000, // 60 seconds
+    destroyTimeoutMillis: 5000, // 5 seconds
+    createRetryIntervalMillis: 200,
+    propagateCreateError: false
 };
 
 // Create a connection pool
@@ -27,26 +33,26 @@ if (process.env.NODE_ENV === 'production') {
 }
 export const pool = new Pool(dbConfig);
 
-// Test the connection on startup
-(async () => {
-    try {
-        const client = await pool.connect();
-        console.log('Connected to PostgreSQL successfully');
-        client.release();
-    } catch (error) {
-        console.error('Failed to connect to PostgreSQL:', error.message);
-        process.exit(1); // Exit if connection fails
-    }
-})();
+// Test the connection on startup - ONLY IN DEVELOPMENT
+if (process.env.NODE_ENV !== 'production') {
+    (async () => {
+        try {
+            const client = await pool.connect();
+            console.log('Connected to PostgreSQL successfully');
+            client.release();
+        } catch (error) {
+            console.error('Failed to connect to PostgreSQL:', error.message);
+            process.exit(1); // Exit if connection fails
+        }
+    })();
+}
 
 // Database helper class for executing queries and transactions
 export class DatabaseHelper {
     static async executeQuery(query, params = []) {
         const client = await pool.connect();
         try {
-            await client.query('BEGIN');
             const result = await client.query(query, params);
-            await client.query('COMMIT');
             return result;
         } catch (error) {
             console.error('Database query error:', { query, params, error: error.message });
