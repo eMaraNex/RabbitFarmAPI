@@ -6,31 +6,28 @@ dotenv.config();
 
 const { Pool } = pg;
 
-// PostgreSQL configuration optimized for serverless
-const dbConfig = {
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT) || 5432,
-    database: process.env.DB_NAME || 'karagani-db',
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD,
-    max: 1, // Reduced for serverless
-    min: 0, // No minimum connections
-    idleTimeoutMillis: 10000, // 10 seconds
-    connectionTimeoutMillis: 60000, // 60 seconds
-    acquireTimeoutMillis: 60000, // 60 seconds
-    createTimeoutMillis: 60000, // 60 seconds
-    destroyTimeoutMillis: 5000, // 5 seconds
-    createRetryIntervalMillis: 200,
-    propagateCreateError: false
-};
+const dbConfig = {};
 
-// Create a connection pool
 if (process.env.NODE_ENV === 'production') {
-    dbConfig.connectionString = process.env.DATABASE_URL; // Use DATABASE_URL in production
-    dbConfig.ssl = {
-        rejectUnauthorized: false, // Allow self-signed certificates
-    };
+    dbConfig.connectionString = process.env.DATABASE_URL;
+} else {
+    dbConfig.host = process.env.DB_HOST || 'localhost';
+    dbConfig.port = parseInt(process.env.DB_PORT) || 5432;
+    dbConfig.database = process.env.DB_NAME || 'karagani-db';
+    dbConfig.user = process.env.DB_USER || 'postgres';
+    dbConfig.password = process.env.DB_PASSWORD;
 }
+
+dbConfig.max = 1; // Reduced for serverless
+dbConfig.min = 0; // No minimum connections
+dbConfig.idleTimeoutMillis = 10000; // 10 seconds
+dbConfig.connectionTimeoutMillis = 60000; // 60 seconds
+dbConfig.acquireTimeoutMillis = 60000; // 60 seconds
+dbConfig.createTimeoutMillis = 60000; // 60 seconds
+dbConfig.destroyTimeoutMillis = 5000; // 5 seconds
+dbConfig.createRetryIntervalMillis = 200;
+dbConfig.propagateCreateError = false;
+
 export const pool = new Pool(dbConfig);
 
 // Test the connection on startup - ONLY IN DEVELOPMENT
