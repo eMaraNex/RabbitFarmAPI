@@ -10,6 +10,7 @@ const dbConfig = {};
 
 if (process.env.NODE_ENV === 'production') {
     dbConfig.connectionString = process.env.DATABASE_URL;
+    dbConfig.ssl = false;
 } else {
     dbConfig.host = process.env.DB_HOST || 'localhost';
     dbConfig.port = parseInt(process.env.DB_PORT) || 5432;
