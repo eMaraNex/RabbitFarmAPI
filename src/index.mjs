@@ -54,7 +54,7 @@ const swaggerOptions = {
     apis: ['./src/routes/*.js'],
 };
 
-const swaggerSpec = swaggerJsdoc(swaggerOptions);
+// const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 // Security middleware
 app.use(helmet({
@@ -98,7 +98,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // API Documentation
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+// app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.post('/migrate', runSetUp);
 
