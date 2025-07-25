@@ -891,11 +891,16 @@ async function runMigrations() {
   let client;
 
   try {
-    // Verify database connection
+    console.log('🔌 Getting database connection from pool...');
     client = await pool.connect();
-    logger.info('Successfully connected to the database');
+    console.log('✅ Successfully connected to database');
+
+    // Test connection
+    const testResult = await client.query('SELECT NOW() as current_time');
+    console.log('⏰ Database time:', testResult.rows[0].current_time);
 
     // Create migrations table
+    console.log('📋 Creating migrations tracking table...');
     await client.query(`
       CREATE TABLE IF NOT EXISTS migrations (
         id SERIAL PRIMARY KEY,
@@ -908,40 +913,77 @@ async function runMigrations() {
     // Get executed migrations
     const result = await client.query('SELECT version FROM migrations ORDER BY version');
     const executedVersions = result.rows.map(row => row.version);
+    console.log('📊 Previously executed migrations:', executedVersions);
 
-    // Apply migrations
+    // Apply migrations one by one
     for (const migration of migrations) {
       if (!executedVersions.includes(migration.version)) {
-        logger.info(`Applying migration ${migration.version}: ${migration.name}`);
+        console.log(`🚀 Applying migration ${migration.version}: ${migration.name}`);
+
+        // Use explicit transaction
         await client.query('BEGIN');
         try {
+          // Execute the migration SQL
           await client.query(migration.up);
+
+          // Record the migration
           await client.query(
             'INSERT INTO migrations (version, name) VALUES ($1, $2)',
             [migration.version, migration.name]
           );
+
+          // Commit the transaction
           await client.query('COMMIT');
-          logger.info(`Migration ${migration.version} applied successfully`);
+          console.log(`✅ Migration ${migration.version} completed successfully`);
         } catch (err) {
+          // Rollback on error
           await client.query('ROLLBACK');
-          logger.error(`Migration ${migration.version} failed: ${err.message}`);
+          console.error(`❌ Migration ${migration.version} failed:`, err.message);
           throw new Error(`Migration ${migration.version} failed: ${err.message}`);
         }
       } else {
-        logger.info(`Skipping migration ${migration.version}: already applied`);
+        console.log(`⏭️  Skipping migration ${migration.version}: already applied`);
       }
     }
 
-    logger.info('All migrations completed successfully');
+    // Verify tables were created
+    console.log('🔍 Verifying tables were created...');
+    const tablesResult = await client.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_type = 'BASE TABLE'
+      ORDER BY table_name
+    `);
+
+    console.log(`📊 Total tables in database: ${tablesResult.rows.length}`);
+    tablesResult.rows.forEach((row, index) => {
+      console.log(`  ${index + 1}. ${row.table_name}`);
+    });
+
+    console.log('🎉 All migrations completed successfully');
+
   } catch (error) {
-    logger.error('Migration process failed:', error.message);
+    console.error('💥 Migration process failed:', error.message);
+    console.error('Full error details:', error);
     throw new Error(`Migration process failed: ${error.message}`);
   } finally {
     if (client) {
       client.release();
-      logger.info('Database connection released');
+      console.log('🔌 Database connection released back to pool');
     }
+    // Close the pool to allow process to exit
+    await pool.end();
+    console.log('🏁 Migration process completed');
+    process.exit(0);
   }
 }
 
+// Export the function for use if needed
 export default runMigrations;
+
+// Run migrations if this file is executed directly
+runMigrations().catch(error => {
+  console.error('Migration failed:', error);
+  process.exit(1);
+});

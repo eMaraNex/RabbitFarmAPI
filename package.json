@@ -5,9 +5,9 @@
   "main": "src/index.mjs",
   "type": "module",
   "scripts": {
-    "start": "node src/index.mjs",
-    "dev": "nodemon src/index.mjs",
-    "migrate": "node src/database/migrate.js",
+    "start": "node --max-old-space-size=256 --no-experimental-fetch src/index.mjs",
+    "dev": "nodemon --max-old-space-size=256 --no-experimental-fetch src/index.mjs", 
+    "migrate": "node --max-old-space-size=128 --no-experimental-fetch src/database/migrate.js",
     "seed": "node src/database/seed.js",
     "test": "jest --detectOpenHandles",
     "test:watch": "jest --watch",
