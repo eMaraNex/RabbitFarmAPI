@@ -9,9 +9,6 @@ const migrations = [
     version: 1,
     name: 'create_initial_tables',
     up: `
-      -- Enable UUID extension
-      CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
       -- Create roles table
       CREATE TABLE IF NOT EXISTS roles (
         id SERIAL PRIMARY KEY,
