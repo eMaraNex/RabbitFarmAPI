@@ -39,12 +39,29 @@ class EmailService {
     async initialize() {
         try {
             const today = new Date().toISOString().split('T')[0];
+
+            // Check if email_logs table exists
+            const tableCheck = await DatabaseHelper.executeQuery(`
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'email_logs'
+            ) as table_exists
+        `);
+
+            if (!tableCheck.rows[0].table_exists) {
+                this.logger.info('email_logs table does not exist. Initializing with zero emails sent.');
+                this.emailsSentToday = 0;
+                return;
+            }
+
+            // Proceed with original query if table exists
             const result = await DatabaseHelper.executeQuery(`
-                SELECT COUNT(*) as count
-                FROM email_logs
-                WHERE date = $1
-                AND is_deleted = 0
-            `, [today]);
+            SELECT COUNT(*) as count
+            FROM email_logs
+            WHERE date = $1
+            AND is_deleted = 0
+        `, [today]);
 
             this.emailsSentToday = parseInt(result.rows[0].count, 10) || 0;
             this.logger.info(`Email service initialized. Emails sent today: ${this.emailsSentToday}`);
